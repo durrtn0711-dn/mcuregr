@@ -46,12 +46,12 @@ label.f input,label.f select{display:block;width:100%;font:inherit;padding:9px;m
 </div>
 <div id="keg" hidden>
   <div class="bar"><div class="row"><button class="sec" id="back" style="flex:0 0 auto">Kembali</button><b id="jd" style="align-self:center;flex:3"></b></div>
-  <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input type="search" id="q" placeholder="Cari nama, No RM, NIK, atau nomor TTD" autocomplete="off" style="flex:1;min-width:0"><button class="sec" id="scan" style="flex:0 0 auto">Scan berkas</button></div></div>
+  <input type="search" id="q" placeholder="Cari nama, No RM, NIK, atau nomor TTD" autocomplete="off" style="margin-top:8px"><div class="row" id="scanRow" style="margin-top:8px"><button class="sec" id="scan">Scan berkas</button><button class="sec" id="scanK">Scan KTP</button></div></div>
   <div class="stat"><div><b id="sT">0</b>Peserta</div><div><b id="sH">0</b>Hadir</div><div><b id="sK">0</b>Berkas</div></div>
   <div id="peserta"></div>
   <div id="aksi" style="margin-top:14px"></div>
 </div>
-<dialog id="dlg"></dialog><dialog id="dlg2"></dialog><dialog id="dlg3"></dialog><dialog id="dlgS"></dialog>
+<dialog id="dlg"></dialog><dialog id="dlg2"></dialog><dialog id="dlg3"></dialog><dialog id="dlgS"></dialog><dialog id="dlgK"></dialog>
 </main>
 <script>
 let S={url:localStorage.getItem('mcu_url')||'',pin:localStorage.getItem('mcu_pin')||''};
@@ -100,7 +100,7 @@ const cocok=(p,q)=>/^\d{1,4}$/.test(q)?p.no===+q:(p.nama.toUpperCase().includes(
 function gambar(){
   const q=$('q').value.trim().toUpperCase(),R=K.rows;
   $('jd').textContent=K.kode+' · '+tglId(K.tgl)+(K.status==='DITUTUP'?' · Ditutup':'');
-  $('scan').hidden=K.status!=='DRAFT';
+  $('scanRow').hidden=K.status!=='DRAFT';
   $('sT').textContent=R.length;$('sH').textContent=R.filter(p=>p.hadir).length;$('sK').textContent=R.filter(p=>p.kumpul).length;
   const f=!q?R:R.filter(p=>cocok(p,q));
   $('peserta').innerHTML=f.length?f.map(p=>`<div class="p ${kelas(p)}" data-no="${p.no}"><div><b>${p.no}. ${esc(p.nama)}</b><small>${esc(p.rm)}</small>${p.cek?'<span class="cek">Perlu dicek: '+esc(p.cek)+'</span>':''}</div><small>${p.kumpul?'Berkas ✓':p.hadir?'Hadir':K.status==='DITUTUP'?'Tidak hadir':''}</small></div>`).join(''):'<div class="mut">Tidak ada peserta yang cocok.</div>';
@@ -130,8 +130,8 @@ function popup(no){
   if($('bE'))$('bE').onclick=()=>{d.close();form(p)};
 }
 
-function form(p){
-  const d=$('dlg3'),baru=!p,v=k=>esc(p?p[k]:'');
+function form(p,pre){
+  const d=$('dlg3'),baru=!p,v=k=>esc(p?p[k]:(pre&&pre[k]||''));
   const f=(k,l,t)=>`<label class="f">${l}<input type="${t||'text'}" id="f_${k}" value="${v(k)}" autocomplete="off"${k==='nik'?' inputmode="numeric"':''}></label>`;
   const sel=(k,l,o,cur)=>`<label class="f">${l}<select id="f_${k}">${o.map(([a,b])=>`<option value="${a}"${a===cur?' selected':''}>${b}</option>`).join('')}</select></label>`;
   d.innerHTML=`<h3>${baru?'Tambah peserta':'Edit peserta'}</h3>`+f('nama','Nama')+sel('jk','Jenis kelamin',[['','-'],['L','Laki-laki'],['P','Perempuan']],p?p.jk:'')+f('tgl','Tanggal lahir','date')+f('nik','NIK (16 digit)')+f('hp','No HP')+f('jenis','Jenis MCU')+f('urut','No. urut MCU (PT)')+f('bagian','Bagian')+f('jabatan','Jabatan')+f('tempat','Tempat lahir')+
@@ -229,6 +229,78 @@ function bukaScan(){
     msgS('Kamera tidak bisa dibuka ('+(e&&e.message||e)+'). Pakai Ambil foto atau ketik manual.','warn');$('scMan').hidden=false;QR=null});
 }
 $('scan').onclick=bukaScan;
+// ---------- scan KTP (OCR membaca NIK) ----------
+let KS=null,TWp=null;
+const muatSkrip=u=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=no;document.head.appendChild(s)});
+async function siapOCR(){ // dimuat hanya saat pertama kali dipakai
+  if(!window.Tesseract){try{await muatSkrip('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js')}catch(e){await muatSkrip('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js')}}
+  const w=await Tesseract.createWorker('eng');
+  await w.setParameters({tessedit_char_whitelist:'0123456789',tessedit_pageseg_mode:'7'});
+  return w;
+}
+function stopKTP(){if(KS){KS.getTracks().forEach(t=>t.stop());KS=null}}
+function msgK(t,c){const m=$('kMsg');if(m)m.innerHTML=`<div class="ms ${c}">${esc(t)}</div>`}
+function olah(src,sx,sy,sw,sh){ // potong, perbesar, hitamputihkan supaya angka lebih jelas
+  const sc=sw>2400?2400/sw:(sw<1400?Math.min(3,1400/sw):1),c=document.createElement('canvas');
+  c.width=Math.round(sw*sc);c.height=Math.round(sh*sc);
+  const x=c.getContext('2d');x.drawImage(src,sx,sy,sw,sh,0,0,c.width,c.height);
+  const im=x.getImageData(0,0,c.width,c.height),d=im.data,n=c.width*c.height,g=new Uint8Array(n),hist=new Array(256).fill(0);
+  for(let i=0,j=0;j<n;i+=4,j++){const v=Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2]);g[j]=v;hist[v]++}
+  let acc=0,lo=0,hi=255;for(let v=0;v<256;v++){acc+=hist[v];if(acc>=n*.02){lo=v;break}}
+  acc=0;for(let v=255;v>=0;v--){acc+=hist[v];if(acc>=n*.02){hi=v;break}}
+  const r=Math.max(20,hi-lo);
+  for(let i=0,j=0;j<n;i+=4,j++){const v=Math.max(0,Math.min(255,(g[j]-lo)*255/r));d[i]=d[i+1]=d[i+2]=v}
+  x.putImageData(im,0,0);return c;
+}
+function skor(a,b){ // berapa digit NIK peserta yang sama dengan hasil baca (toleran geser posisi)
+  let best=0;for(let o=-3;o<=Math.max(0,a.length-13);o++){let s=0;for(let i=0;i<b.length;i++){const j=i+o;if(j>=0&&j<a.length&&a[j]===b[i])s++}if(s>best)best=s}return best}
+function cariNik(dg){
+  const out=$('kRes');if(!out)return;
+  if(dg.length<10){msgK('Angka terbaca terlalu sedikit ('+dg.length+' digit). Ulangi foto atau ketik NIK.','warn');out.innerHTML='';return}
+  const h=K.rows.filter(p=>p.nik).map(p=>({p,s:skor(dg,String(p.nik))})).sort((a,b)=>b.s-a.s),top=h.filter(x=>x.s>=12).slice(0,3);
+  if(top.length&&top[0].s>=16){if(navigator.vibrate)navigator.vibrate(80);$('dlgK').close();popup(top[0].p.no);return}
+  if(top.length){msgK('Hampir cocok. Pilih peserta yang benar:','warn');
+    out.innerHTML=top.map(x=>`<div class="p" data-no="${x.p.no}"><div><b>${x.p.no}. ${esc(x.p.nama)}</b><small>${esc(x.p.nik)}</small></div><small>${x.s}/16 digit</small></div>`).join('');return}
+  msgK('NIK tidak ditemukan di kegiatan ini.','bad');
+  out.innerHTML='<button class="sec" id="kTmb" style="width:100%">Tambah peserta manual dengan NIK ini</button>';
+}
+async function baca(c,mode){
+  msgK('Membaca angka…','warn');if($('kShot'))$('kShot').disabled=true;
+  try{const w=await(TWp||(TWp=siapOCR()));await w.setParameters({tessedit_pageseg_mode:mode});
+    const r=await w.recognize(c),dg=String(r.data.text).replace(/\D/g,'');
+    $('kNik').value=dg.slice(0,16);cariNik(dg)}
+  catch(e){TWp=null;msgK('Gagal membaca: '+(e&&e.message||e)+'. Ketik NIK manual.','bad')}
+  if($('kShot'))$('kShot').disabled=false;
+}
+async function ambilFoto(){
+  const v=$('kVid');if(!v.videoWidth)return msgK('Kamera belum siap.','warn');
+  const b=$('kBand').getBoundingClientRect(),r=v.getBoundingClientRect(),vw=v.videoWidth,vh=v.videoHeight,py=.15*b.height;
+  const sx=Math.max(0,(b.left-r.left)/r.width*vw),sy=Math.max(0,(b.top-py-r.top)/r.height*vh);
+  const sw=Math.min(vw-sx,b.width/r.width*vw),sh=Math.min(vh-sy,(b.height+2*py)/r.height*vh);
+  await baca(olah(v,sx,sy,sw,sh),'7');
+}
+async function bukaKTP(){
+  const d=$('dlgK');
+  d.innerHTML=`<h3>Scan KTP</h3><div id="kBox" style="position:relative;background:#111;border-radius:8px;overflow:hidden"><video id="kVid" playsinline autoplay muted style="width:100%;display:block;min-height:140px"></video><div id="kBand" style="position:absolute;left:5%;width:90%;top:35%;height:15%;border:2px solid #7cff7c;border-radius:4px;box-shadow:0 0 0 999px rgba(0,0,0,.45)"></div></div><div class="mut" style="margin:6px 0">Arahkan baris NIK (16 angka) ke kotak hijau, tahan dengan stabil, lalu tekan Ambil foto.</div><div id="kMsg" style="margin:6px 0"><div class="ms warn">Menyiapkan pembaca KTP…</div></div><div class="row"><button id="kShot" disabled>Ambil foto</button><button class="sec" id="kFoto">Dari foto</button></div><input type="file" id="kFile" accept="image/*" capture="environment" hidden><label class="f">Atau ketik NIK manual<input type="text" id="kNik" inputmode="numeric" maxlength="16" autocomplete="off"></label><button class="sec" id="kCari" style="width:100%">Cari NIK ini</button><div id="kRes" style="margin-top:8px"></div><button class="sec" id="kX" style="width:100%;margin-top:8px">Tutup</button>`;
+  d.showModal();d.onclose=stopKTP;
+  $('kX').onclick=()=>d.close();$('kShot').onclick=ambilFoto;$('kFoto').onclick=()=>$('kFile').click();
+  $('kCari').onclick=()=>cariNik($('kNik').value.replace(/\D/g,''));
+  $('kNik').oninput=()=>{$('kNik').value=$('kNik').value.replace(/\D/g,'')};
+  $('kFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+    try{const im=await createImageBitmap(f);await baca(olah(im,0,0,im.width,im.height),'11')}catch(x){msgK('Foto tidak bisa dibaca.','bad')}};
+  $('kRes').onclick=e=>{const c=e.target.closest('.p');
+    if(c){d.close();popup(+c.dataset.no)}
+    else if(e.target.id==='kTmb'){const n=$('kNik').value.replace(/\D/g,'');d.close();form(null,{nik:n})}};
+  TWp=TWp||siapOCR();
+  TWp.then(()=>{if($('kMsg')&&$('kShot')){msgK('Siap. Arahkan baris NIK ke kotak hijau.','ok');$('kShot').disabled=!KS&&!$('kBox').hidden}}).catch(()=>{TWp=null;msgK('Pembaca KTP gagal dimuat (perlu internet). Ketik NIK manual.','warn')});
+  try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    if(!d.open){s.getTracks().forEach(t=>t.stop());return}
+    KS=s;$('kVid').srcObject=s;try{s.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{})}catch(x){}
+    TWp&&TWp.then(()=>{if($('kShot'))$('kShot').disabled=false}).catch(()=>{});
+  }catch(e){$('kBox').hidden=true;$('kShot').hidden=true;msgK('Kamera tidak bisa dibuka ('+(e&&e.name||e)+'). Pakai Dari foto atau ketik NIK.','warn')}
+}
+$('scanK').onclick=bukaKTP;
+
 function tampilLogin(pesan){$('home').hidden=true;$('keg').hidden=true;$('login').hidden=false;$('lgUrl').value=S.url;$('lgPin').value='';$('lgErr').textContent=pesan||''}
 $('lgGo').onclick=async()=>{
   const u=$('lgUrl').value.trim(),p=$('lgPin').value.trim();
