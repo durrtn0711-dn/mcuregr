@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--ink:#17222d;--mut:#66727e;--bg:#f3f5f6;--card:#fff;--ac:#0d6e6e;--line:#dde3e7;--kn:#fff0a6;--hj:#bfe8a4;--md:#ff6b6b}
+html{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adjust:100%}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:11pt/1.4 Calibri,Carlito,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+main{max-width:560px;margin:0 auto;padding:12px 12px 70px}h1{font-size:19px;margin:4px 0 12px}h2{font-size:15px;margin:16px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px}
+button{font:inherit;border:0;border-radius:8px;padding:9px 12px;background:var(--ac);color:#fff;font-weight:600;cursor:pointer}
+button.sec{background:#e5ebee;color:var(--ink)}button.bad{background:#b3261e}button.out{background:#fff;color:#b3261e;border:1px solid #b3261e}button:disabled{opacity:.45}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #7cc4c4;outline-offset:2px}
+input[type=text],input[type=date],input[type=search]{width:100%;font:inherit;padding:9px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}.pt button{flex:1;font-size:15px;padding:12px}
+.keg{display:flex;justify-content:space-between;align-items:center;cursor:pointer}.badge{font-size:12px;padding:3px 9px;border-radius:99px;background:var(--kn)}
+.badge.t{background:#e5ebee}.mut{color:var(--mut);font-size:13px}.err{color:#b3261e;font-weight:600}
+.stat{display:flex;gap:8px;margin:10px 0}.stat div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px}.stat b{font-size:20px;display:block}
+.p{padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:#fff;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.p.h{background:var(--kn)}.p.k{background:var(--hj)}.p.m{background:var(--md)}.p small{color:#4b5762;display:block}.p.m small{color:#17222d}
+.cek{color:#9a5b00;font-size:12px}.bar{position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:2}
+dialog{border:0;border-radius:14px;padding:16px;width:min(92vw,420px);max-height:90vh;overflow:auto;font:inherit;color:var(--ink)}dialog::backdrop{background:#0008}
+dialog h3{margin:0 0 8px;font-size:18px}dialog dl{margin:10px 0;display:grid;grid-template-columns:110px 1fr;gap:4px 8px}dialog dt{color:var(--mut)}dialog dd{margin:0;font-weight:600}
+label.o{display:inline-flex;align-items:center;gap:6px;margin:6px 14px 6px 0}
+label.f{display:block;margin:8px 0;font-size:13px;color:var(--mut)}
+label.f input,label.f select{display:block;width:100%;font:inherit;padding:9px;margin-top:3px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+.ms{padding:9px 11px;border-radius:8px;font-weight:600}.ms.ok{background:var(--hj)}.ms.warn{background:var(--kn)}.ms.bad{background:var(--md)}
+</style></head><body><main>
+<div id="login" hidden>
+  <h1>MCU registrasi</h1>
+  <div class="card"><b>Masuk</b><div class="mut" style="margin-bottom:8px">Isi sekali, tersimpan di perangkat ini.</div>
+    <label class="f">Alamat server (URL web app Apps Script)<input type="text" id="lgUrl" autocomplete="off"></label>
+    <label class="f">PIN<input type="text" id="lgPin" autocomplete="off" inputmode="numeric"></label>
+    <div id="lgErr" class="err"></div><button id="lgGo" style="width:100%;margin-top:8px">Masuk</button></div>
+</div>
+<div id="home">
+  <h1>MCU registrasi</h1>
+  <div class="card"><b>Mulai kegiatan atau tambah peserta</b><div class="mut">Pilih perusahaan, tanggal, lalu file Excel mentah.</div>
+    <div class="row pt" id="pt" style="margin:10px 0"></div>
+    <div id="up" hidden><input type="date" id="tgl" style="margin-bottom:8px"><input type="file" id="file" accept=".xlsx,.xls" style="margin-bottom:8px;width:100%">
+      <button id="cekBtn" style="width:100%">Periksa file</button></div>
+    <div id="hasil"></div></div>
+  <h2>Kegiatan</h2><div id="list"><div class="mut">Memuat…</div></div>
+  <button class="sec" id="keluar" style="width:100%;margin-top:24px">Keluar / ganti PIN</button>
+  <button class="out" id="resetAll" style="width:100%;margin-top:8px">Reset semua data</button>
+</div>
+<div id="keg" hidden>
+  <div class="bar"><div class="row"><button class="sec" id="back" style="flex:0 0 auto">Kembali</button><b id="jd" style="align-self:center;flex:3"></b></div>
+  <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input type="search" id="q" placeholder="Cari nama, No RM, NIK, atau nomor TTD" autocomplete="off" style="flex:1;min-width:0"><button class="sec" id="scan" style="flex:0 0 auto">Scan berkas</button></div></div>
+  <div class="stat"><div><b id="sT">0</b>Peserta</div><div><b id="sH">0</b>Hadir</div><div><b id="sK">0</b>Berkas</div></div>
+  <div id="peserta"></div>
+  <div id="aksi" style="margin-top:14px"></div>
+</div>
+<dialog id="dlg"></dialog><dialog id="dlg2"></dialog><dialog id="dlg3"></dialog><dialog id="dlgS"></dialog>
+</main>
+<script>
+let S={url:localStorage.getItem('mcu_url')||'',pin:localStorage.getItem('mcu_pin')||''};
+const run=async(fn,...args)=>{
+  let j;
+  try{const r=await fetch(S.url,{method:'POST',body:JSON.stringify({pin:S.pin,fn,args})});j=await r.json()}
+  catch(e){throw'Tidak bisa terhubung ke server. Cek alamat server dan koneksi internet.'}
+  if(!j.ok)throw j.error||'Terjadi kesalahan';
+  return j.data;
+};
+const $=id=>document.getElementById(id),SKIP=/^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$/i;
+let K=null,kode=null,payload=null;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tglId=t=>{if(!t)return'-';const[y,m,d]=t.split('-');return d+'-'+m+'-'+y};
+
+async function home(){
+  $('login').hidden=true;$('keg').hidden=true;$('home').hidden=false;
+  try{const h=await run('getHome');
+    if(!h||!h.pt||!h.pt.length){$('pt').innerHTML='<div class="err" style="flex:1">Daftar perusahaan kosong. Cek sheet PENGATURAN atau jalankan siapkan() lagi.</div>'}
+    else $('pt').innerHTML=h.pt.map(p=>`<button data-k="${esc(p.kode)}">${esc(p.kode)}</button>`).join('');
+    $('list').innerHTML=h.keg.length?h.keg.map(g=>`<div class="card keg" data-id="${g.id}"><div><b>${esc(g.kode)}</b> ${tglId(g.tgl)}</div><span class="badge ${g.status==='DRAFT'?'':'t'}">${g.status==='DRAFT'?'Draft':'Ditutup'}</span></div>`).join(''):'<div class="mut">Belum ada kegiatan. Upload data mentah untuk memulai.</div>';
+  }catch(e){if(e==='PIN salah')return tampilLogin('PIN salah, coba lagi.');$('list').innerHTML='<div class="err">'+esc(e)+'</div>'}
+}
+$('pt').onclick=e=>{const b=e.target.closest('button');if(!b)return;kode=b.dataset.k;
+  [...$('pt').children].forEach(x=>x.className=x===b?'':'sec');$('up').hidden=false;$('tgl').value=new Date().toISOString().slice(0,10);$('hasil').innerHTML='';payload=null};
+$('list').onclick=e=>{const c=e.target.closest('.keg');if(c){c.querySelector('.badge').textContent='Memuat…';buka(c.dataset.id)}};
+
+$('cekBtn').onclick=async()=>{
+  const f=$('file').files[0],t=$('tgl').value;if(!f||!t){$('hasil').innerHTML='<div class="err">Pilih tanggal dan file dulu.</div>';return}
+  $('hasil').textContent='Membaca file…';
+  try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    payload=wb.SheetNames.filter(n=>!SKIP.test(n)).map(n=>({name:n,rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''}).map(r=>r.slice(0,40))}));
+    const r=await run('previewUpload',kode,t,payload);
+    $('hasil').innerHTML=`<div class="card" style="margin-top:10px"><b>${r.total} peserta di file</b><div>${r.baru} baru, ${r.lewat} dilewati karena sudah ada, ${r.cek.length} perlu dicek</div>`+
+      (r.cek.length?'<div class="cek" style="margin-top:6px">'+r.cek.map(c=>`${c.no}. ${esc(c.nama)}: ${esc(c.masalah)}`).join('<br>')+'</div>':'')+
+      `<div class="row" style="margin-top:10px"><button id="simpan" ${r.baru?'':'disabled'}>Simpan ${r.baru} peserta</button><button class="sec" id="batal">Batal</button></div></div>`;
+    $('batal').onclick=()=>{$('hasil').innerHTML='';payload=null};
+    $('simpan').onclick=async()=>{$('simpan').disabled=true;$('simpan').textContent='Menyimpan…';try{const s=await run('simpanUpload',kode,t,payload);await buka(s.keg)}catch(e){$('hasil').innerHTML='<div class="err">'+esc(e)+'</div>'}};
+  }catch(e){$('hasil').innerHTML='<div class="err">'+esc(e)+'</div>'}
+};
+
+async function buka(id){try{K=await run('getKegiatan',id);$('home').hidden=true;$('keg').hidden=false;$('q').value='';renderAksi();gambar()}catch(e){alert(e);home()}}
+$('back').onclick=home;$('q').oninput=gambar;
+const kelas=p=>K.status==='DITUTUP'&&!p.hadir?'m':p.kumpul?'k':p.hadir?'h':'';
+const cocok=(p,q)=>/^\d{1,4}$/.test(q)?p.no===+q:(p.nama.toUpperCase().includes(q)||p.rm.toUpperCase().includes(q)||String(p.nik).includes(q));
+function gambar(){
+  const q=$('q').value.trim().toUpperCase(),R=K.rows;
+  $('jd').textContent=K.kode+' · '+tglId(K.tgl)+(K.status==='DITUTUP'?' · Ditutup':'');
+  $('scan').hidden=K.status!=='DRAFT';
+  $('sT').textContent=R.length;$('sH').textContent=R.filter(p=>p.hadir).length;$('sK').textContent=R.filter(p=>p.kumpul).length;
+  const f=!q?R:R.filter(p=>cocok(p,q));
+  $('peserta').innerHTML=f.length?f.map(p=>`<div class="p ${kelas(p)}" data-no="${p.no}"><div><b>${p.no}. ${esc(p.nama)}</b><small>${esc(p.rm)}</small>${p.cek?'<span class="cek">Perlu dicek: '+esc(p.cek)+'</span>':''}</div><small>${p.kumpul?'Berkas ✓':p.hadir?'Hadir':K.status==='DITUTUP'?'Tidak hadir':''}</small></div>`).join(''):'<div class="mut">Tidak ada peserta yang cocok.</div>';
+}
+function renderAksi(){
+  const draft=K.status==='DRAFT';
+  $('aksi').innerHTML=(draft?'<button class="sec" id="tmb" style="width:100%">+ Tambah peserta manual</button><button class="bad" id="tutup" style="width:100%;margin-top:8px">Close MCU</button>'
+    :(K.url?`<a href="${K.url}" target="_blank"><button style="width:100%">Buka file final</button></a><a href="${K.url.replace('/edit','/export?format=xlsx')}" target="_blank"><button class="sec" style="width:100%;margin-top:8px">Unduh Excel</button></a>`:'')
+    +'<button class="sec" id="buka2" style="width:100%;margin-top:8px">Buka lagi untuk diedit</button><div class="mut" style="margin:8px 0">File dan data terhapus otomatis 4 hari setelah perubahan terakhir. Unduh dulu bila perlu.</div>')
+    +'<button class="out" id="rst" style="width:100%;margin-top:8px">Reset data MCU ini</button>';
+}
+$('aksi').onclick=e=>{const b=e.target.closest('button');if(!b)return;const f={tmb:()=>form(null),tutup:konfirmTutup,buka2:konfirmBuka,rst:konfirmReset}[b.id];if(f)f()};
+$('peserta').onclick=e=>{const c=e.target.closest('.p');if(c)popup(+c.dataset.no)};
+
+function popup(no){
+  const p=K.rows.find(x=>x.no===no),d=$('dlg'),op=K.status==='DRAFT';
+  d.innerHTML=`<h3>${esc(p.nama)}</h3><dl><dt>No RM</dt><dd>${esc(p.rm)}</dd><dt>Tgl lahir</dt><dd>${tglId(p.tgl)}</dd><dt>Usia</dt><dd>${p.usia||'-'} tahun</dd><dt>Jenis kelamin</dt><dd>${p.jk==='L'?'Laki-laki':p.jk==='P'?'Perempuan':'-'}</dd><dt>Nomor TTD</dt><dd>${p.no}</dd><dt>Berkas</dt><dd>${p.kumpul?'Terkumpul':'Belum'}</dd></dl>`+
+   (p.cek?`<div class="cek">Perlu dicek dengan KTP: ${esc(p.cek)}</div>`:'')+
+   (p.jk==='P'?(p.hadir||!op?`<p>Haid/hamil: <b>${esc(p.haid||'Tidak ada')}</b></p>`:`<p>Haid/hamil<br><label class="o"><input type="radio" name="h" value="" checked> Tidak ada</label><label class="o"><input type="radio" name="h" value="HAID"> Haid</label><label class="o"><input type="radio" name="h" value="HAMIL"> Hamil</label></p>`):'')+
+   '<div class="row" style="margin-top:12px">'+(op&&!p.hadir?'<button id="bH">Hadir</button>':'')+(op&&p.hadir&&!p.kumpul?'<button id="bK">Sudah mengumpulkan</button>':'')+(op?'<button class="sec" id="bE">Edit</button>':'')+'<button class="sec" id="bX">Tutup</button></div>';
+  d.showModal();$('bX').onclick=()=>d.close();
+  // tampilan langsung berubah, server menyusul di belakang; kalau gagal dikembalikan
+  const kirim=async(fn,patch,...a)=>{const snap={...p};Object.assign(p,patch);d.close();gambar();
+    try{Object.assign(p,await run(fn,K.id,no,...a))}catch(e){Object.assign(p,snap);alert('Gagal menyimpan, dikembalikan: '+e)}gambar()};
+  if($('bH'))$('bH').onclick=()=>{const h=(d.querySelector('input[name=h]:checked')||{}).value||'';kirim('setHadir',{hadir:'proses',haid:h},h)};
+  if($('bK'))$('bK').onclick=()=>kirim('setKumpul',{kumpul:'proses'});
+  if($('bE'))$('bE').onclick=()=>{d.close();form(p)};
+}
+
+function form(p){
+  const d=$('dlg3'),baru=!p,v=k=>esc(p?p[k]:'');
+  const f=(k,l,t)=>`<label class="f">${l}<input type="${t||'text'}" id="f_${k}" value="${v(k)}" autocomplete="off"${k==='nik'?' inputmode="numeric"':''}></label>`;
+  const sel=(k,l,o,cur)=>`<label class="f">${l}<select id="f_${k}">${o.map(([a,b])=>`<option value="${a}"${a===cur?' selected':''}>${b}</option>`).join('')}</select></label>`;
+  d.innerHTML=`<h3>${baru?'Tambah peserta':'Edit peserta'}</h3>`+f('nama','Nama')+sel('jk','Jenis kelamin',[['','-'],['L','Laki-laki'],['P','Perempuan']],p?p.jk:'')+f('tgl','Tanggal lahir','date')+f('nik','NIK (16 digit)')+f('hp','No HP')+f('jenis','Jenis MCU')+f('urut','No. urut MCU (PT)')+f('bagian','Bagian')+f('jabatan','Jabatan')+f('tempat','Tempat lahir')+
+   sel('haid','Haid/hamil',[['','Tidak ada'],['HAID','Haid'],['HAMIL','Hamil']],p?p.haid:'')+
+   sel('status','Status',[['BELUM','Belum hadir'],['HADIR','Hadir'],['KUMPUL','Hadir + berkas terkumpul']],p?(p.kumpul?'KUMPUL':p.hadir?'HADIR':'BELUM'):'BELUM')+
+   '<div id="fErr" class="err"></div><div class="row" style="margin-top:12px"><button id="fS">Simpan</button><button class="sec" id="fX">Batal</button></div>';
+  d.showModal();$('fX').onclick=()=>d.close();
+  $('fS').onclick=async()=>{
+    const g=k=>$('f_'+k).value,data={};['nama','jk','tgl','nik','hp','jenis','urut','bagian','jabatan','tempat','haid','status'].forEach(k=>data[k]=g(k));
+    $('fS').disabled=true;$('fS').textContent='Menyimpan…';
+    try{const r=await run(baru?'tambahPeserta':'simpanPeserta',...(baru?[K.id,data]:[K.id,p.no,data]));
+      if(baru)K.rows.push(r);else Object.assign(p,r);d.close();gambar()}
+    catch(e){$('fErr').textContent=e;$('fS').disabled=false;$('fS').textContent='Simpan'}};
+}
+
+// ---------- konfirmasi ----------
+function konfirm(judul,isi,label,fn){
+  const d=$('dlg2');
+  d.innerHTML=`<h3>${judul}</h3>${isi}<div id="tErr" class="err"></div><div class="row" style="margin-top:12px"><button class="bad" id="ya">${label}</button><button class="sec" id="tdk">Batal</button></div>`;
+  d.showModal();$('tdk').onclick=()=>d.close();
+  $('ya').onclick=async()=>{$('ya').disabled=true;$('ya').textContent='Memproses…';
+    try{const r=await fn();if(r!=='buka')d.close()}catch(e){$('tErr').textContent=e;$('ya').disabled=false;$('ya').textContent=label}};
+}
+function konfirmTutup(){
+  const R=K.rows,H=R.filter(p=>p.hadir).length,B=R.filter(p=>p.kumpul).length;
+  konfirm('Close MCU '+esc(K.kode)+'?',`<dl><dt>Total</dt><dd>${R.length}</dd><dt>Hadir</dt><dd>${H}</dd><dt>Belum hadir</dt><dd>${R.length-H} (jadi tidak hadir)</dd><dt>Berkas terkumpul</dt><dd>${B}</dd></dl><div class="mut">Close bisa dibuka lagi kapan saja untuk diedit.</div>`,'Ya, tutup',async()=>{
+    const r=await run('tutup',K.id);
+    if(r&&r.perlu){pilihBeda(r);return'buka'}
+    K=r;renderAksi();gambar()});
+}
+function pilihBeda(r){
+  const d=$('dlg2');
+  d.innerHTML=`<h3>Ada ${r.jumlah} perbedaan data</h3><div class="mut">Data olahan berbeda dari file upload awal. Pilih data yang dipakai di sheet PENDAFTARAN, HADIR, dan TIDAK HADIR.</div><div style="max-height:40vh;overflow:auto;margin:10px 0;font-size:13px">`+
+   r.beda.map(b=>`<div style="margin-bottom:6px"><b>${b.no}. ${esc(b.nama)}</b> · ${esc(b.kolom)}<br>Awal: ${esc(b.awal)}<br>Olahan: ${esc(b.olahan)}</div>`).join('')+
+   (r.jumlah>r.beda.length?`<div class="mut">…dan ${r.jumlah-r.beda.length} perbedaan lain</div>`:'')+
+   (r.manual.length?`<div class="mut" style="margin-top:6px">Tambahan manual (selalu memakai data olahan): ${r.manual.map(esc).join(', ')}</div>`:'')+
+   `</div><div id="tErr" class="err"></div><div class="row"><button class="sec" id="pA">Sesuai data awal</button><button id="pO">Sesuai data olahan</button></div><button class="sec" id="pX" style="width:100%;margin-top:8px">Batal</button>`;
+  const go=async p=>{$('pA').disabled=$('pO').disabled=true;
+    try{K=await run('tutup',K.id,p);d.close();renderAksi();gambar()}catch(e){$('tErr').textContent=e;$('pA').disabled=$('pO').disabled=false}};
+  $('pA').onclick=()=>go('AWAL');$('pO').onclick=()=>go('OLAHAN');$('pX').onclick=()=>d.close();
+}
+function konfirmBuka(){
+  konfirm('Buka lagi MCU '+esc(K.kode)+'?','<div class="mut">File final yang lama akan dihapus. Setelah selesai mengedit, klik Close MCU lagi untuk membuat file final baru.</div>','Ya, buka lagi',async()=>{K=await run('bukaLagi',K.id);renderAksi();gambar()});
+}
+function konfirmReset(){
+  konfirm('Reset data MCU ini?','<div class="mut">Semua peserta dan file final kegiatan ini dihapus permanen. Setelah itu kamu bisa upload ulang dari awal.</div>','Ya, hapus semua',async()=>{await run('resetKegiatan',K.id);$('hasil').innerHTML='';await home()});
+}
+$('resetAll').onclick=()=>konfirm('Reset SEMUA data?','<div class="mut">Semua kegiatan, peserta, dan file final dihapus permanen. Pengaturan PT tidak ikut terhapus.</div>','Ya, hapus semuanya',async()=>{await run('resetSemua');$('hasil').innerHTML='';await home()});
+
+// ---------- scan barcode No RM ----------
+let QR=null,lastT='',lastAt=0,tmr=null;
+const cfgQR=()=>{const f=window.Html5QrcodeSupportedFormats,fm=f?[f.CODE_128,f.CODE_39,f.CODE_93,f.EAN_13,f.ITF,f.QR_CODE]:undefined;
+  return{formatsToSupport:fm,verbose:false,useBarCodeDetectorIfSupported:true,experimentalFeatures:{useBarCodeDetectorIfSupported:true}}};
+function msgS(t,c){const m=$('scMsg');if(m)m.innerHTML=`<div class="ms ${c}">${esc(t)}</div>`}
+function armTimer(){clearTimeout(tmr);tmr=setTimeout(()=>{const m=$('scMan');if(m)m.hidden=false},5000)}
+function stopScan(){clearTimeout(tmr);const q=QR;QR=null;if(q)q.stop().then(()=>q.clear()).catch(()=>{})}
+function cari(t){t=t.trim().toUpperCase();if(!t)return[];const R=K.rows;
+  let c=R.filter(p=>p.rm.toUpperCase()===t);if(c.length)return c;
+  c=R.filter(p=>{const r=p.rm.toUpperCase();return r.includes(t)||t.includes(r)});if(c.length)return c;
+  return R.filter(p=>p.nik&&String(p.nik)===t.replace(/\D/g,''))}
+function renderRes(list){const r=$('scRes');if(!r)return;
+  r.innerHTML=list.slice(0,8).map(p=>`<div class="p ${kelas(p)}" data-no="${p.no}"><div><b>${p.no}. ${esc(p.nama)}</b><small>${esc(p.rm)}</small></div><small>${p.kumpul?'Berkas ✓':p.hadir?'Hadir':'Belum hadir'}</small></div>`).join('')}
+async function tandai(p){
+  if(K.status!=='DRAFT')return msgS('MCU sudah ditutup','bad');
+  if(!p.hadir)return msgS(p.nama+' belum tercatat hadir','bad');
+  if(p.kumpul)return msgS(p.nama+' sudah mengumpulkan berkas sebelumnya','warn');
+  const snap={...p};p.kumpul='proses';gambar();msgS('✓ '+p.nama+' · berkas terkumpul','ok');
+  try{Object.assign(p,await run('setKumpul',K.id,p.no))}catch(e){Object.assign(p,snap);msgS('Gagal menyimpan '+p.nama+': '+e,'bad')}
+  gambar();
+}
+function onScan(text){
+  const t=Date.now();if(text===lastT&&t-lastAt<4000){lastAt=t;return} // barcode yang sama masih di depan kamera
+  lastT=text;lastAt=t;if(navigator.vibrate)navigator.vibrate(80);
+  const c=cari(text);
+  if(!c.length)msgS('Barcode "'+text+'" tidak ada di kegiatan ini','bad');
+  else if(c.length===1){renderRes([]);tandai(c[0])}
+  else{msgS('Ada '+c.length+' kemungkinan, pilih salah satu','warn');renderRes(c)}
+  armTimer();
+}
+function bukaScan(){
+  const d=$('dlgS');lastT='';
+  d.innerHTML=`<h3>Scan berkas</h3><div id="reader" style="width:100%;min-height:180px;background:#111;border-radius:8px;overflow:hidden"></div><div id="readerF" hidden></div><div id="scMsg" style="margin:8px 0"><div class="mut">Arahkan kamera ke barcode No RM.</div></div><div id="scMan" hidden><input type="search" id="scQ" placeholder="Cari nama, No RM, NIK, atau nomor TTD" autocomplete="off"></div><div id="scRes" style="margin-top:6px"></div><input type="file" id="scFile" accept="image/*" capture="environment" hidden><div class="row" style="margin-top:10px"><button class="sec" id="scKet">Ketik manual</button><button class="sec" id="scFoto">Ambil foto</button><button id="scX">Selesai</button></div>`;
+  d.showModal();d.onclose=stopScan;armTimer();
+  $('scX').onclick=()=>d.close();
+  $('scKet').onclick=()=>{$('scMan').hidden=false;$('scQ').focus()};
+  $('scFoto').onclick=()=>$('scFile').click();
+  $('scFile').onchange=e=>{const f=e.target.files[0];if(!f)return;msgS('Membaca foto…','warn');
+    new Html5Qrcode('readerF',cfgQR()).scanFile(f,false).then(onScan).catch(()=>{msgS('Barcode tidak terbaca di foto. Coba lagi atau ketik manual.','bad');$('scMan').hidden=false});e.target.value=''};
+  $('scQ').oninput=()=>{const q=$('scQ').value.trim().toUpperCase();renderRes(q?K.rows.filter(p=>cocok(p,q)):[])};
+  $('scRes').onclick=e=>{const c=e.target.closest('.p');if(!c)return;const p=K.rows.find(x=>x.no===+c.dataset.no);
+    if(p){$('scRes').innerHTML='';$('scQ').value='';tandai(p)}};
+  if(typeof Html5Qrcode==='undefined'){msgS('Pemindai belum termuat. Pakai Ambil foto atau ketik manual.','warn');$('scMan').hidden=false;return}
+  QR=new Html5Qrcode('reader',cfgQR());
+  QR.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:120}},onScan,()=>{}).catch(e=>{
+    msgS('Kamera tidak bisa dibuka ('+(e&&e.message||e)+'). Pakai Ambil foto atau ketik manual.','warn');$('scMan').hidden=false;QR=null});
+}
+$('scan').onclick=bukaScan;
+function tampilLogin(pesan){$('home').hidden=true;$('keg').hidden=true;$('login').hidden=false;$('lgUrl').value=S.url;$('lgPin').value='';$('lgErr').textContent=pesan||''}
+$('lgGo').onclick=async()=>{
+  const u=$('lgUrl').value.trim(),p=$('lgPin').value.trim();
+  if(!/^https:\/\/script\.google\.com\//.test(u))return $('lgErr').textContent='Alamat server harus diawali https://script.google.com/ dan diakhiri /exec';
+  if(!p)return $('lgErr').textContent='Isi PIN.';
+  S={url:u,pin:p};$('lgGo').disabled=true;$('lgErr').textContent='Memeriksa…';
+  try{await run('getHome');localStorage.setItem('mcu_url',u);localStorage.setItem('mcu_pin',p);await home()}
+  catch(e){$('lgErr').textContent=e}
+  $('lgGo').disabled=false;
+};
+$('keluar').onclick=()=>{localStorage.removeItem('mcu_pin');S.pin='';tampilLogin('')};
+if(S.url&&S.pin)home();else tampilLogin('');
+</script></body></html>
