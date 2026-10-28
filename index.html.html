@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--ink:#17222d;--mut:#66727e;--bg:#f3f5f6;--card:#fff;--ac:#0d6e6e;--line:#dde3e7;--kn:#fff0a6;--hj:#bfe8a4;--md:#ff6b6b}
+html{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adjust:100%}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:11pt/1.4 Calibri,Carlito,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+main{max-width:560px;margin:0 auto;padding:12px 12px 70px}h1{font-size:19px;margin:4px 0 12px}h2{font-size:15px;margin:16px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px}
+button{font:inherit;border:0;border-radius:8px;padding:9px 12px;background:var(--ac);color:#fff;font-weight:600;cursor:pointer}
+button.sec{background:#e5ebee;color:var(--ink)}button.bad{background:#b3261e}button.out{background:#fff;color:#b3261e;border:1px solid #b3261e}button:disabled{opacity:.45}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #7cc4c4;outline-offset:2px}
+input[type=text],input[type=date],input[type=search]{width:100%;font:inherit;padding:9px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}.pt button{flex:1;font-size:15px;padding:12px}
+.keg{display:flex;justify-content:space-between;align-items:center;cursor:pointer}.badge{font-size:12px;padding:3px 9px;border-radius:99px;background:var(--kn)}
+.badge.t{background:#e5ebee}.mut{color:var(--mut);font-size:13px}.err{color:#b3261e;font-weight:600}
+.stat{display:flex;gap:8px;margin:10px 0}.stat div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px}.stat b{font-size:20px;display:block}
+.p{padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:#fff;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.p.h{background:var(--kn)}.p.k{background:var(--hj)}.p.m{background:var(--md)}.p small{color:#4b5762;display:block}.p.m small{color:#17222d}
+.cek{color:#9a5b00;font-size:12px}.bar{position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:2}
+dialog{border:0;border-radius:14px;padding:16px;width:min(92vw,420px);max-height:90vh;overflow:auto;font:inherit;color:var(--ink)}dialog::backdrop{background:#0008}
+dialog h3{margin:0 0 8px;font-size:18px}dialog dl{margin:10px 0;display:grid;grid-template-columns:110px 1fr;gap:4px 8px}dialog dt{color:var(--mut)}dialog dd{margin:0;font-weight:600}
+label.o{display:inline-flex;align-items:center;gap:6px;margin:4px 8px 4px 0;font-size:13px}
+label.f{display:block;margin:8px 0;font-size:13px;color:var(--mut)}
+label.f input,label.f select{display:block;width:100%;font:inherit;padding:9px;margin-top:3px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+.ms{padding:9px 11px;border-radius:8px;font-weight:600}.ms.ok{background:var(--hj)}.ms.warn{background:var(--kn)}.ms.bad{background:var(--md)}
+.haid-box{background:#f8fafb;border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0}
+</style></head><body><main>
+<div id="login" hidden>
+  <h1>MCU registrasi</h1>
+  <div class="card"><b>Masuk</b><div class="mut" style="margin-bottom:8px">Isi sekali, tersimpan di perangkat ini.</div>
+    <label class="f">Alamat server (URL web app Apps Script)<input type="text" id="lgUrl" autocomplete="off"></label>
+    <label class="f">PIN<input type="text" id="lgPin" autocomplete="off" inputmode="numeric"></label>
+    <div id="lgErr" class="err"></div><button id="lgGo" style="width:100%;margin-top:8px">Masuk</button></div>
+</div>
+<div id="home">
+  <h1>MCU registrasi</h1>
+  <div class="card"><b>Mulai kegiatan atau tambah peserta</b><div class="mut">Pilih perusahaan, tanggal, lalu file Excel mentah.</div>
+    <div class="row pt" id="pt" style="margin:10px 0"></div>
+    <div id="up" hidden><input type="date" id="tgl" style="margin-bottom:8px"><input type="file" id="file" accept=".xlsx,.xls" style="margin-bottom:8px;width:100%">
+      <button id="cekBtn" style="width:100%">Periksa file</button></div>
+    <div id="hasil"></div></div>
+  <h2>Kegiatan</h2><div id="list"><div class="mut">Memuat…</div></div>
+  <button class="sec" id="keluar" style="width:100%;margin-top:24px">Keluar / ganti PIN</button>
+  <button class="out" id="resetAll" style="width:100%;margin-top:8px">Reset semua data</button>
+</div>
+<div id="keg" hidden>
+  <div class="bar"><div class="row"><button class="sec" id="back" style="flex:0 0 auto">Kembali</button><b id="jd" style="align-self:center;flex:3"></b></div>
+  <input type="search" id="q" placeholder="Cari nama, No RM, NIK, atau nomor TTD" autocomplete="off" style="margin-top:8px"><div class="row" id="scanRow" style="margin-top:8px"><button class="sec" id="scan">Scan No RM</button><button class="sec" id="scanK">Scan KTP</button></div></div>
+  <div class="stat"><div><b id="sT">0</b>Peserta</div><div><b id="sH">0</b>Hadir</div><div><b id="sK">0</b>Berkas</div></div>
+  <div id="peserta"></div>
+  <div id="aksi" style="margin-top:14px"></div>
+</div>
+<dialog id="dlg"></dialog><dialog id="dlg2"></dialog><dialog id="dlg3"></dialog><dialog id="dlgS"></dialog><dialog id="dlgK"></dialog>
+</main>
+<script>
+let S={url:localStorage.getItem('mcu_url')||'',pin:localStorage.getItem('mcu_pin')||''};
+const run=async(fn,...args)=>{
+  let j;
+  try{const r=await fetch(S.url,{method:'POST',body:JSON.stringify({pin:S.pin,fn,args})});j=await r.json()}
+  catch(e){throw'Tidak bisa terhubung ke server. Cek alamat server dan koneksi internet.'}
+  if(!j.ok)throw j.error||'Terjadi kesalahan';
+  return j.data;
+};
+const $=id=>document.getElementById(id),SKIP=/^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$/i;
+let K=null,kode=null
