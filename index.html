@@ -209,8 +209,7 @@
 </div>
 
 <!-- SheetJS & SheetJS-Style untuk Border, Alignment, dan Background Warna Sel Penuh -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx-js-style.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script>
     let appData = {
         url: localStorage.getItem("mcu_url") || "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec",
@@ -343,19 +342,21 @@
                 let data = new Uint8Array(e.target.result);
                 let workbook = XLSX.read(data, { type: 'array' });
                 let payloadSheets = [];
+                let rawSheets = [];
                 let skipRegex = /^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$/i;
 
                 workbook.SheetNames.forEach(sheetName => {
                     if (!skipRegex.test(sheetName)) {
                         let ws = workbook.Sheets[sheetName];
                         let rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+                        rawSheets.push({ name: sheetName, rows: rows });
                         let trimmedRows = rows.map(r => r.slice(0, 40));
                         payloadSheets.push({ name: sheetName, rows: trimmedRows });
                     }
                 });
 
                 let res = await callBackend("previewUpload", [pt, tgl, payloadSheets]);
-                appData.tempUploadPayload = { kode: pt, tgl: tgl, payload: payloadSheets };
+                appData.tempUploadPayload = { kode: pt, tgl: tgl, payload: payloadSheets, raw: rawSheets };
 
                 document.getElementById("previewInfo").innerHTML = `<b>Total Ditemukan: ${res.total} Peserta</b> | Baru: ${res.baru}, Dilewati: ${res.lewat}`;
                 
@@ -387,6 +388,7 @@
         let action = document.getElementById("conflictAction").value;
         
         let s = await callBackend("simpanUpload", [up.kode, up.tgl, up.payload, action]);
+        try { localStorage.setItem("mcu_raw_" + s.keg, JSON.stringify(up.raw || up.payload)); } catch (e) {}
         appData.activeKegiatan = await callBackend("getKegiatan", [s.keg]);
         
         document.getElementById("previewSection").classList.add("hidden");
@@ -544,7 +546,27 @@
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
         }
 
-        buildSheet("MCU KLINIK JEPARA", K.rows, false);
+        // Sheet pertama: file mentah apa adanya
+        let rawStored = null;
+        try { rawStored = JSON.parse(localStorage.getItem("mcu_raw_" + K.id)); } catch (e) {}
+        if (rawStored && rawStored.length) {
+            rawStored.forEach((sh, i) => {
+                let wsM = XLSX.utils.aoa_to_sheet(sh.rows);
+                let range = XLSX.utils.decode_range(wsM["!ref"] || "A1");
+                for (let r = range.s.r; r <= range.e.r; r++) {
+                    for (let c = range.s.c; c <= range.e.c; c++) {
+                        let ref = XLSX.utils.encode_cell({ r: r, c: c });
+                        if (!wsM[ref]) continue;
+                        if (r === 0) wsM[ref].s = { font: { name: "Calibri", sz: 11, bold: true }, fill: { patternType: "solid", fgColor: { rgb: "D9D9D9" } }, border: thinBorder };
+                        else wsM[ref].s = { font: { name: "Calibri", sz: 11 }, border: thinBorder };
+                    }
+                }
+                XLSX.utils.book_append_sheet(wb, wsM, i === 0 ? "MCU KLINIK JEPARA" : sh.name);
+            });
+        } else {
+            alert("File mentah tidak tersimpan di perangkat ini (upload dilakukan di perangkat lain). Sheet pertama diisi data pendaftaran.");
+            buildSheet("MCU KLINIK JEPARA", K.rows, false);
+        }
         buildSheet("PENDAFTARAN", K.rows, true);
         buildSheet("HADIR", K.rows.filter(p => p.hadir), true);
         buildSheet("TIDAK HADIR", K.rows.filter(p => !p.hadir), true);
