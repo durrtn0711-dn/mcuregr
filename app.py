@@ -7,6 +7,7 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
+# Setup Halaman
 st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="centered")
 
 # --- INITIALIZATION STATE ---
@@ -94,7 +95,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ==========================================
-# 2. HEADER
+# 2. HEADER & LOGOUT
 # ==========================================
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
@@ -114,7 +115,7 @@ if st.session_state.active_kegiatan is None:
     st.caption("Pilih perusahaan, tanggal kegiatan, lalu upload file mentah Excel.")
 
     if not st.session_state.daftar_pt:
-        st.error("Daftar perusahaan kosong. Pastikan sheet PENGATURAN di Apps Script diisi.")
+        st.error("Daftar perusahaan kosong. Cek sheet PENGATURAN di Apps Script.")
     else:
         pt_pilihan = st.selectbox("Pilih Perusahaan / PT", st.session_state.daftar_pt)
         tgl_kegiatan = st.date_input("Tanggal Kegiatan", datetime.now())
@@ -144,12 +145,12 @@ if st.session_state.active_kegiatan is None:
                         "kode": pt_pilihan,
                         "tgl": tgl_str,
                         "payload": payload_sheets,
-                        "res": res,
-                        "raw_bytes": uploaded_file.getvalue()
+                        "res": res
                     }
                 except Exception as e:
                     st.error(f"Gagal membaca file: {e}")
 
+    # Preview Upload & Deteksi Duplikat
     if "temp_upload" in st.session_state and st.session_state.temp_upload:
         up = st.session_state.temp_upload
         r = up["res"]
@@ -249,7 +250,7 @@ else:
 
     st.divider()
 
-    # List Cards Peserta
+    # List Peserta Card
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
@@ -301,7 +302,7 @@ else:
     st.divider()
 
     # ==========================================
-    # EXPORT EXCEL 4 SHEET PRESISI DENGAN BLOK WARNA (KUNING, IJO, MERAH)
+    # EXPORT EXCEL 4 SHEET PERFEK (F4F207 KUNING, BORDER, ALIGNMENT, HAID/HAMIL CHAMPION)
     # ==========================================
     if rows:
         st.subheader("📥 Export File Excel Final (4 Sheet Berwarna)")
@@ -309,19 +310,25 @@ else:
         kode_pt = str(K.get("kode", "")).upper()
         tgl_indo_str = format_tgl(K.get("tgl"))
         
-        # DEFINISI WARNA STANDAR EXCEL SAMPLE
-        FILL_GREEN = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")  # Hadir/Ijo
-        FILL_YELLOW = PatternFill(start_color="FFF0A6", end_color="FFF0A6", fill_type="solid") # Hadir/Kuning
-        FILL_RED = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")   # Tidak Hadir/Merah
+        # WARNA KHUSUS & STYLE BORDER
+        FILL_GREEN = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")  # Ijo (Hadir + Berkas)
+        FILL_YELLOW = PatternFill(start_color="F4F207", end_color="F4F207", fill_type="solid") # Kuning (#F4F207)
+        FILL_RED = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")   # Merah (Tidak Hadir)
         FILL_HEADER = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")# Header Abu
+
+        THIN_SIDE = Side(border_style="thin", color="000000")
+        TABLE_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
+
+        ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
+        ALIGN_LEFT = Alignment(horizontal="left", vertical="center")
 
         wb = openpyxl.Workbook()
         wb.remove(wb.active) # Hapus sheet default
 
-        # HEADER BERDASARKAN PT
+        # DEKLARASI HEADER & MAPPING KOLOM
         if "SMJ" in kode_pt:
             judul_pt = "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY"
-            headers = ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR (BLN-TGL-THN)', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD']
+            headers = ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR (BLN-TGL-THN)', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD', 'HAID/HAMIL']
             cols_map = ['no', 'rm', 'nama', 'jk', 'tgl', 'usia', 'nik', 'hp', 'jenis']
         else:
             judul_pt = "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA"
@@ -330,29 +337,28 @@ else:
 
         # 1. SHEET MCU KLINIK JEPARA (DATA MENTAH)
         ws_raw = wb.create_sheet(title="MCU KLINIK JEPARA")
-        raw_headers = [h for h in headers if h != 'TTD']
-        ws_raw.append(raw_headers)
-        for r_idx, p in enumerate(rows, start=1):
-            row_data = [p.get(c, "") for c in cols_map]
-            ws_raw.append(row_data)
+        ws_raw.append(headers)
+        for p in rows:
+            r_val = [p.get(c, "") for c in cols_map] + [p.get("no", ""), p.get("haid", "")]
+            ws_raw.append(r_val)
 
-        # FUNGSI MEMBUAT SHEET FORMAL (PENDAFTARAN, HADIR, TIDAK HADIR)
+        # FUNGSI BUILD SHEET BERGAYA FORMAL
         def build_styled_sheet(sheet_title, data_subset, is_pendaftaran=False):
             ws = wb.create_sheet(title=sheet_title)
             
-            # Header Judul Atas
+            # Row 1 & 2: Judul Atas
             ws.cell(row=1, column=1, value=judul_pt).font = Font(bold=True, size=11)
             ws.cell(row=2, column=1, value=f"TANGGAL {tgl_indo_str}").font = Font(bold=True, size=11)
             
-            # Row 3 Kosong
-            # Row 4 Table Header
+            # Row 4: Header Tabel
             for col_idx, text in enumerate(headers, start=1):
                 cell = ws.cell(row=4, column=col_idx, value=text)
                 cell.fill = FILL_HEADER
                 cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.alignment = ALIGN_CENTER
+                cell.border = TABLE_BORDER
             
-            # Isi Data Pasien & Beri Warna Sesuai Aturan
+            # Isi Data Pasien
             for r_idx, p in enumerate(data_subset, start=5):
                 # Tentukan Warna Baris
                 if is_pendaftaran:
@@ -365,21 +371,32 @@ else:
                 else:
                     row_fill = FILL_GREEN if sheet_title == "HADIR" else FILL_RED
 
-                # Isi Kolom
+                # Isi Kolom Utama
                 for c_idx, key in enumerate(cols_map, start=1):
                     val = p.get(key, "")
                     cell = ws.cell(row=r_idx, column=c_idx, value=val)
                     cell.fill = row_fill
+                    cell.border = TABLE_BORDER
+                    
+                    # Kolom NAMA Rata Kiri, Lainnya Rata Tengah
+                    if key == "nama":
+                        cell.alignment = ALIGN_LEFT
+                    else:
+                        cell.alignment = ALIGN_CENTER
 
-                # Kolom TTD
-                cell_ttd = ws.cell(row=r_idx, column=len(cols_map) + 1, value=p.get("no", ""))
+                # Kolom TTD (Samping Kanan Kolom NIK/HP)
+                col_ttd_idx = len(cols_map) + 1
+                cell_ttd = ws.cell(row=r_idx, column=col_ttd_idx, value=p.get("no", ""))
                 cell_ttd.fill = row_fill
-                cell_ttd.alignment = Alignment(horizontal="center")
+                cell_ttd.border = TABLE_BORDER
+                cell_ttd.alignment = ALIGN_CENTER
 
-                # Kolom HAID/HAMIL (Khusus PWJ)
-                if "SMJ" not in kode_pt:
-                    cell_haid = ws.cell(row=r_idx, column=len(cols_map) + 2, value=p.get("haid", ""))
-                    cell_haid.fill = row_fill
+                # Kolom HAID/HAMIL (Samping Kanan TTD)
+                col_haid_idx = len(cols_map) + 2
+                cell_haid = ws.cell(row=r_idx, column=col_haid_idx, value=p.get("haid", ""))
+                cell_haid.fill = row_fill
+                cell_haid.border = TABLE_BORDER
+                cell_haid.alignment = ALIGN_CENTER
 
         # 2. SHEET PENDAFTARAN (Semua Peserta + Hijau/Kuning/Merah)
         build_styled_sheet("PENDAFTARAN", rows, is_pendaftaran=True)
