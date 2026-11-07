@@ -12,82 +12,6 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS SUPER PRESISI UNTUK BARIS KARTU BLOK WARNA & POP-UP DI HP ---
-st.markdown("""
-<style>
-/* Reset Margin HP */
-.block-container {
-    padding-top: 0.3rem !important;
-    padding-bottom: 1rem !important;
-    padding-left: 0.2rem !important;
-    padding-right: 0.2rem !important;
-}
-
-/* Jarak vertikal dipadatkan rapat */
-div[data-testid="stVerticalBlock"] > div {
-    gap: 0.15rem !important;
-}
-
-/* Badge Statistik Sejajar Hemat Tempat */
-.stat-box {
-    background-color: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 6px;
-    padding: 6px 10px;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    margin-bottom: 6px;
-    font-size: 0.85rem;
-}
-.stat-num {
-    font-weight: bold;
-    font-size: 1.1rem;
-}
-
-/* MEMAKSA TOMBOL STREAMLIT UNTUK MENJADI KARTU BLOK WARNA WARNI RAPAT */
-div.stButton > button {
-    width: 100% !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    padding: 8px 10px !important;
-    border-radius: 6px !important;
-    font-weight: bold !important;
-    font-size: 0.88rem !important;
-    margin-bottom: 0px !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-
-/* KUNING HADIR (#F4F207) */
-div.btn-kuning > div.stButton > button {
-    background-color: #F4F207 !important;
-    color: #000000 !important;
-    border: 1.5px solid #C4C200 !important;
-}
-
-/* HIJAU BERKAS TERKUMPUL (#92D050) */
-div.btn-ijo > div.stButton > button {
-    background-color: #92D050 !important;
-    color: #000000 !important;
-    border: 1.5px solid #6A9E32 !important;
-}
-
-/* MERAH TIDAK HADIR / DITUTUP (#FF0000) */
-div.btn-merah > div.stButton > button {
-    background-color: #FF0000 !important;
-    color: #FFFFFF !important;
-    border: 1.5px solid #B30000 !important;
-}
-
-/* BELUM HADIR (HITAM/ABU STANDAR) */
-div.btn-putih > div.stButton > button {
-    background-color: #262730 !important;
-    color: #FFFFFF !important;
-    border: 1px solid #444444 !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 # --- INITIALIZATION STATE ---
 if "url" not in st.session_state:
     st.session_state.url = DEFAULT_URL
@@ -219,13 +143,13 @@ def popup_detail_peserta(p, K):
             if st.button("✅ Set Hadir", type="primary", use_container_width=True):
                 res_p = run_apps_script("setHadir", K["id"], no_p, haid_final_val)
                 p.update(res_p)
-                st.rerun() # REFRESH & POPUP UTOMATIS CLOSED!
+                st.rerun()
 
         elif hadir and not kumpul:
             if st.button("📁 Berkas Terkumpul", type="primary", use_container_width=True):
                 res_p = run_apps_script("setKumpul", K["id"], no_p)
                 p.update(res_p)
-                st.rerun() # REFRESH & POPUP UTOMATIS CLOSED!
+                st.rerun()
 
     # FORM EDIT
     with st.expander("✏️ Edit Data Peserta Ini"):
@@ -387,7 +311,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI (SISTEM POP-UP MODAL RAPAT)
+# 4. DETAIL KEGIATAN & PRESENSI (DIRECT CSS TARGETING - 100% BLOK WARNA)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -431,31 +355,63 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # RENDER BARIS NAMA PESERTA PENUH WARNA (SANGAT RAPAT DI HP)
+    # ENJEKSI CSS LANGSUNG MENARGETKAN KEY KARTU PESERTA (100% PASTI WARNA WARNI RAPAT)
+    css_rules = """
+    <style>
+    .block-container { padding: 0.3rem 0.2rem !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0.1rem !important; }
+    .stat-box {
+        background-color: #1e1e1e; border: 1px solid #333; border-radius: 6px;
+        padding: 6px 10px; display: flex; justify-content: space-around; align-items: center;
+        margin-bottom: 6px; font-size: 0.85rem;
+    }
+    .stat-num { font-weight: bold; font-size: 1.1rem; }
+    div.stButton > button {
+        width: 100% !important; text-align: left !important; justify-content: flex-start !important;
+        padding: 8px 10px !important; border-radius: 6px !important; font-weight: bold !important;
+        font-size: 0.88rem !important; margin: 1px 0px !important; box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    """
+
     for p in filtered:
+        no_p = p['no']
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
-        no_p = p['no']
         
-        # Penentuan CSS Blok Warna Kartu
         if K.get("status") == "DITUTUP" and not hadir:
-            btn_cls = "btn-merah"
+            bg_c, text_c, border_c = "#FF0000", "#FFFFFF", "#B30000" # MERAH
         elif kumpul:
-            btn_cls = "btn-ijo"
+            bg_c, text_c, border_c = "#92D050", "#000000", "#6A9E32" # HIJAU
         elif hadir:
-            btn_cls = "btn-kuning"
+            bg_c, text_c, border_c = "#F4F207", "#000000", "#C4C200" # KUNING
         else:
-            btn_cls = "btn-putih"
+            bg_c, text_c, border_c = "#262730", "#FFFFFF", "#444444" # HITAM STANDAR
 
-        # TAMPILKAN TOMBOL KARTU WARNA
-        st.markdown(f'<div class="{btn_cls}">', unsafe_allow_html=True)
+        # Kunci CSS Langsung per Tombol Key
+        css_rules += f"""
+        div.stButton > button[key="pcard_{no_p}"] {{
+            background-color: {bg_c} !important;
+            color: {text_c} !important;
+            border: 1.5px solid {border_c} !important;
+        }}
+        div.stButton > button[key="pcard_{no_p}"]:hover {{
+            background-color: {bg_c} !important;
+            color: {text_c} !important;
+            opacity: 0.9 !important;
+        }}
+        """
+
+    css_rules += "</style>"
+    st.markdown(css_rules, unsafe_allow_html=True)
+
+    # RENDER DAFTAR KARTU NAMA
+    for p in filtered:
+        no_p = p['no']
         label_btn = f"{no_p}. {p['nama']} ({p['rm']})"
         
-        # PAS DIKLIK -> MUNCUL POP-UP MODAL!
+        # KLIK NAMA PESERTA -> MUNCUL POP-UP DIALOG DI TENGAH LAYAR
         if st.button(label_btn, key=f"pcard_{no_p}"):
             popup_detail_peserta(p, K)
-            
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # TAMBAH MANUAL PESERTA
     if K.get("status") == "DRAFT":
@@ -518,135 +474,4 @@ else:
             headers = ['NO', 'NO RM', 'NAMA', 'NO. URUT MCU', 'BAGIAN', 'JABATAN', 'TEMPAT LAHIR', 'TANGGAL LAHIR', 'USIA', 'JENIS KELAMIN', 'NO HP', 'NO. KTP', 'TTD', 'HAID/HAMIL']
             cols_map = ['no', 'rm', 'nama', 'urut', 'bagian', 'jabatan', 'tempat', 'tgl', 'usia', 'jk', 'hp', 'nik']
 
-        ws_raw = wb.create_sheet(title="MCU KLINIK JEPARA")
-        ws_raw.append(headers)
-        for p in rows:
-            r_val = [p.get(c, "") for c in cols_map] + [p.get("no", ""), p.get("haid", "")]
-            ws_raw.append(r_val)
-
-        def build_styled_sheet(sheet_title, data_subset, is_pendaftaran=False):
-            ws = wb.create_sheet(title=sheet_title)
-            
-            ws.cell(row=1, column=1, value=judul_pt).font = Font(bold=True, size=11)
-            ws.cell(row=2, column=1, value=f"TANGGAL {tgl_indo_str}").font = Font(bold=True, size=11)
-            
-            for col_idx, text in enumerate(headers, start=1):
-                cell = ws.cell(row=4, column=col_idx, value=text)
-                cell.fill = FILL_HEADER
-                cell.font = Font(bold=True)
-                cell.alignment = ALIGN_CENTER
-                cell.border = TABLE_BORDER
-            
-            for r_idx, p in enumerate(data_subset, start=5):
-                if is_pendaftaran:
-                    if p.get("kumpul"):
-                        row_fill = FILL_GREEN
-                    elif p.get("hadir"):
-                        row_fill = FILL_YELLOW
-                    else:
-                        row_fill = FILL_RED
-                else:
-                    row_fill = FILL_GREEN if sheet_title == "HADIR" else FILL_RED
-
-                for c_idx, key in enumerate(cols_map, start=1):
-                    val = p.get(key, "")
-                    cell = ws.cell(row=r_idx, column=c_idx, value=val)
-                    cell.fill = row_fill
-                    cell.border = TABLE_BORDER
-                    
-                    if key == "nama":
-                        cell.alignment = ALIGN_LEFT
-                    else:
-                        cell.alignment = ALIGN_CENTER
-
-                col_ttd_idx = len(cols_map) + 1
-                cell_ttd = ws.cell(row=r_idx, column=col_ttd_idx, value=p.get("no", ""))
-                cell_ttd.fill = row_fill
-                cell_ttd.border = TABLE_BORDER
-                cell_ttd.alignment = ALIGN_CENTER
-
-                col_haid_idx = len(cols_map) + 2
-                cell_haid = ws.cell(row=r_idx, column=col_haid_idx, value=p.get("haid", ""))
-                cell_haid.fill = row_fill
-                cell_haid.border = TABLE_BORDER
-                cell_haid.alignment = ALIGN_CENTER
-
-        build_styled_sheet("PENDAFTARAN", rows, is_pendaftaran=True)
-        peserta_hadir = [p for p in rows if p.get("hadir")]
-        build_styled_sheet("HADIR", peserta_hadir)
-        peserta_tidak = [p for p in rows if not p.get("hadir")]
-        build_styled_sheet("TIDAK HADIR", peserta_tidak)
-
-        buffer = io.BytesIO()
-        wb.save(buffer)
-
-        st.download_button(
-            label=f"📄 Unduh Excel Final ({kode_pt})",
-            data=buffer.getvalue(),
-            file_name=f"MCU_{kode_pt}_{K['tgl']}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-
-    st.divider()
-
-    # --- CLOSE MCU & BUKA LAGI ---
-    if K.get("status") == "DRAFT":
-        if st.button("🔒 Close MCU", type="primary", use_container_width=True):
-            try:
-                with st.spinner("Memproses penutupan MCU..."):
-                    res_close = run_apps_script("tutup", K["id"])
-                    
-                    if isinstance(res_close, dict) and res_close.get("perlu"):
-                        st.session_state.pilih_beda = res_close
-                        st.rerun()
-                    else:
-                        st.session_state.active_kegiatan = res_close
-                        if "pilih_beda" in st.session_state:
-                            del st.session_state.pilih_beda
-                        st.success(f"MCU {K['kode']} berhasil ditutup!")
-                        st.rerun()
-            except Exception as e:
-                st.error(f"Gagal Close MCU: {e}")
-
-        if "pilih_beda" in st.session_state and st.session_state.pilih_beda:
-            pb = st.session_state.pilih_beda
-            st.warning(f"⚠️ Ada {pb.get('jumlah', 0)} perbedaan data olahan dengan file pendaftaran awal.")
-            
-            col_aw, col_ol = st.columns(2)
-            with col_aw:
-                if st.button("Sesuai Data Awal"):
-                    res_close = run_apps_script("tutup", K["id"], "AWAL")
-                    st.session_state.active_kegiatan = res_close
-                    del st.session_state.pilih_beda
-                    st.rerun()
-            with col_ol:
-                if st.button("Sesuai Data Olahan"):
-                    res_close = run_apps_script("tutup", K["id"], "OLAHAN")
-                    st.session_state.active_kegiatan = res_close
-                    del st.session_state.pilih_beda
-                    st.rerun()
-
-    else:
-        if K.get("url"):
-            st.markdown(f"[📂 Buka File Final Spreadsheet Drive]({K['url']})")
-            st.markdown(f"[📥 Unduh File Excel Apps Script]({K['url'].replace('/edit', '/export?format=xlsx')})")
-        
-        st.info("Status MCU saat ini: **DITUTUP**.")
-        if st.button("🔓 Buka lagi untuk diedit", use_container_width=True, type="primary"):
-            try:
-                with st.spinner("Membuka kembali MCU..."):
-                    res_buka = run_apps_script("bukaLagi", K["id"])
-                    st.session_state.active_kegiatan = res_buka
-                    st.success("MCU berhasil dibuka kembali!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Gagal membuka MCU: {e}")
-
-    # Reset MCU Spesifik
-    with st.expander("⚠️ Reset Data MCU Ini"):
-        if st.button("Hapus MCU Ini", type="secondary"):
-            run_apps_script("resetKegiatan", K["id"])
-            st.session_state.active_kegiatan = None
-            load_home_data()
-            st.rerun()
+        ws_raw = wb.create
