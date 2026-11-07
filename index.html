@@ -87,7 +87,7 @@
 <div class="container">
     <!-- HALAMAN LOGIN -->
     <div id="loginSection" class="card">
-        <h3>🏥 MCU Registrasi <small style="font-weight:normal;color:#888;">v3</small></h3>
+        <h3>🏥 MCU Registrasi <small style="font-weight:normal;color:#888;">v4</small></h3>
         <label>URL Apps Script (Web App)</label>
         <input type="text" id="inputUrl" value="https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec">
         <label>PIN Akses</label>
@@ -538,6 +538,22 @@
         // ---- Sheet 1: file mentah apa adanya ----
         let rawStored = null;
         try { rawStored = JSON.parse(localStorage.getItem("mcu_raw_" + K.id)); } catch (e) {}
+        // Tidak ada salinan mentah di perangkat ini -> minta izin menyusun dari data yang sudah tersimpan di server
+        if (!(rawStored && rawStored.length)) {
+            if (confirm("File mentah tidak ada di perangkat ini (kemungkinan di-upload dari perangkat lain).\n\nSusun sheet file mentah dari data yang sudah tersimpan di server?")) {
+                try {
+                    let m = await callBackend("getMentah", [K.id]);
+                    if (m && m.header && m.rows && m.rows.length) {
+                        rawStored = [{ name: "MCU KLINIK JEPARA", rows: [m.header].concat(m.rows) }];
+                        try { localStorage.setItem("mcu_raw_" + K.id, JSON.stringify(rawStored)); } catch (e) {}
+                    } else {
+                        alert("Tidak ada data mentah tersimpan di server untuk kegiatan ini. Sheet file mentah dilewati.");
+                    }
+                } catch (e) {
+                    alert("Data mentah tidak bisa diambil dari server (pastikan Code.gs sudah diperbarui). Sheet file mentah dilewati.");
+                }
+            }
+        }
         if (rawStored && rawStored.length) {
             rawStored.forEach((sh, i) => {
                 let ws = wb.addWorksheet(i === 0 ? "MCU KLINIK JEPARA" : sh.name);
@@ -566,8 +582,6 @@
                 }
                 wd.forEach((w, c) => { ws.getColumn(c + 1).width = w; });
             });
-        } else {
-            alert("File mentah tidak tersimpan di perangkat ini (upload dilakukan di perangkat lain). Sheet pertama dilewati.");
         }
 
         // ---- Sheet 2-4 ----
