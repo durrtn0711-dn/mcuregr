@@ -12,10 +12,10 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- GLOBAL CSS PERMANEN: RAKET & 100% BLOK WARNA TERKUNCI ---
+# --- CSS SUPER PRESISI LAYAR HP ---
 st.markdown("""
 <style>
-/* Reset Padding Layar HP */
+/* Reset Margin HP */
 .block-container {
     padding-top: 0.3rem !important;
     padding-bottom: 1rem !important;
@@ -23,12 +23,9 @@ st.markdown("""
     padding-right: 0.2rem !important;
 }
 
-/* Hilangkan Spasi Kosong Antar Baris di HP */
-div[data-testid="stVerticalBlock"] {
-    gap: 0.1rem !important;
-}
+/* Jarak Antar Komponen Padat */
 div[data-testid="stVerticalBlock"] > div {
-    gap: 0.1rem !important;
+    gap: 0.15rem !important;
     margin-bottom: 0px !important;
 }
 
@@ -49,56 +46,32 @@ div[data-testid="stVerticalBlock"] > div {
     font-size: 1.1rem;
 }
 
-/* STYLE TOMBOL UTAMA PESERTA */
-div[data-testid="stButton"] > button {
-    width: 100% !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    padding: 9px 12px !important;
-    border-radius: 6px !important;
-    font-weight: bold !important;
-    font-size: 0.9rem !important;
-    margin-top: 1px !important;
-    margin-bottom: 1px !important;
+/* Style Kartu Nama HTML Native */
+.card-item {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 0.92rem;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    margin-bottom: 2px;
 }
 
-/* KARTU HADIR (KUNING #F4F207) */
-div[data-testid="stButton"] > button.card-kuning {
-    background-color: #F4F207 !important;
-    color: #000000 !important;
-    border: 1.5px solid #C4C200 !important;
+/* Tombol Transparan Klik Nama */
+div.stButton > button {
+    width: 100% !important;
+    padding: 2px !important;
+    font-size: 0.8rem !important;
 }
 
-/* KARTU BERKAS TERKUMPUL (HIJAU #92D050) */
-div[data-testid="stButton"] > button.card-ijo {
-    background-color: #92D050 !important;
-    color: #000000 !important;
-    border: 1.5px solid #6A9E32 !important;
-}
-
-/* KARTU TIDAK HADIR / DITUTUP (MERAH #FF0000) */
-div[data-testid="stButton"] > button.card-merah {
-    background-color: #FF0000 !important;
-    color: #FFFFFF !important;
-    border: 1.5px solid #B30000 !important;
-}
-
-/* KARTU BELUM HADIR (STANDAR ABU/HITAM) */
-div[data-testid="stButton"] > button.card-putih {
-    background-color: #262730 !important;
-    color: #FFFFFF !important;
-    border: 1px solid #444444 !important;
-}
-
-/* PANEL DETAIL PESERTA MEKAR */
+/* Panel Detail Mekar */
 .detail-panel {
     background-color: #1a1a1a;
     border: 1px solid #444;
     border-radius: 6px;
-    padding: 8px 10px;
+    padding: 10px;
     margin-top: 2px;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
     color: #ffffff;
 }
 </style>
@@ -330,7 +303,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI (100% BLOK WARNA + RAPAT DI HP)
+# 4. DETAIL KEGIATAN (HTML INLINE NATIVE PERMANEN - 100% BLOK WARNA GARANSI)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -375,49 +348,43 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # RENDER BARIS PESERTA DENGAN WARNA WARNI 100% MENYALA
+    # RENDER DAFTAR PESERTA MENGGUNAKAN NATIVE HTML INLINE BLOK WARNA
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
         no_p = p['no']
         
-        # Penentuan Kelas CSS Warna
+        # Penentuan Warna HTML Native
         if K.get("status") == "DITUTUP" and not hadir:
-            card_cls = "card-merah"
+            bg_c, text_c, border_c = "#FF0000", "#FFFFFF", "#B30000" # MERAH
         elif kumpul:
-            card_cls = "card-ijo"
+            bg_c, text_c, border_c = "#92D050", "#000000", "#6A9E32" # HIJAU
         elif hadir:
-            card_cls = "card-kuning"
+            bg_c, text_c, border_c = "#F4F207", "#000000", "#C4C200" # KUNING
         else:
-            card_cls = "card-putih"
+            bg_c, text_c, border_c = "#262730", "#FFFFFF", "#444444" # STANDAR
 
-        # Label Murni: No + Nama Lengkap (No RM Dibuang)
-        btn_label = f"{no_p}. {p['nama']}"
         is_selected = (st.session_state.selected_peserta == no_p)
+        icon_toggle = "🔼" if is_selected else "🔽"
 
-        # 1. TOMBOL NAMA PESERTA UTAMA (WARNA WARNI NATIVE STREAMLIT)
-        # Menempelkan class warna langsung ke button HTML Streamlit
-        btn_clicked = st.button(btn_label, key=f"btn_card_{no_p}")
-        
-        # Inject Class CSS khusus untuk tombol ini
+        # 1. RENDERING KARTU NAMA BLOK WARNA HTML NATIVE
         st.markdown(f"""
-        <script>
-        var btn = window.parent.document.querySelector('button[key="btn_card_{no_p}"]');
-        if(btn) {{
-            btn.className = 'st-emotion-cache-190q069 {card_cls}';
-        }}
-        </script>
+        <div class="card-item" style="background-color: {bg_c} !important; color: {text_c} !important; border: 1.5px solid {border_c} !important;">
+            {no_p}. {p['nama']}
+        </div>
         """, unsafe_allow_html=True)
 
-        if btn_clicked:
+        # 2. TOMBOL PILIH/DETAIL DI BAWAH KARTU WARNA
+        btn_txt = f"{icon_toggle} Klik untuk opsi No. {no_p}" if not is_selected else f"{icon_toggle} Tutup Opsi No. {no_p}"
+        if st.button(btn_txt, key=f"btn_toggle_{no_p}"):
             if is_selected:
                 st.session_state.selected_peserta = None
             else:
                 st.session_state.selected_peserta = no_p
             st.rerun()
 
-        # 2. DETAIL PANEL YANG MEKAR SAAT NAMA DIKLIK
+        # 3. DETAIL PANEL MEKAR SAAT DIKLIK
         if is_selected:
             with st.container():
                 st.markdown('<div class="detail-panel">', unsafe_allow_html=True)
@@ -452,24 +419,24 @@ else:
                                 elif opt_h == "HAMIL":
                                     haid_final_val = "HAMIL"
 
-                            # KLIK SET HADIR -> KARTU AUTOMATIS LANGSUNG CLOSED!
-                            if st.button("Set Hadir", key=f"btn_h_{no_p}", type="primary"):
+                            # KLIK SET HADIR -> OTOMATIS TERTUTUP RAPAT!
+                            if st.button("Set Hadir", key=f"btn_h_{no_p}", type="primary", use_container_width=True):
                                 res_p = run_apps_script("setHadir", K["id"], no_p, haid_final_val)
                                 p.update(res_p)
-                                st.session_state.selected_peserta = None # AUTO CLOSE KARTU
+                                st.session_state.selected_peserta = None
                                 st.rerun()
 
                     with col_act2:
                         if hadir and not kumpul:
-                            # KLIK BERKAS -> KARTU AUTOMATIS LANGSUNG CLOSED!
-                            if st.button("Berkas Terkumpul", key=f"btn_k_{no_p}"):
+                            # KLIK BERKAS -> OTOMATIS TERTUTUP RAPAT!
+                            if st.button("Berkas Terkumpul", key=f"btn_k_{no_p}", use_container_width=True):
                                 res_p = run_apps_script("setKumpul", K["id"], no_p)
                                 p.update(res_p)
-                                st.session_state.selected_peserta = None # AUTO CLOSE KARTU
+                                st.session_state.selected_peserta = None
                                 st.rerun()
 
                     with col_act3:
-                        if st.button("✏️ Edit", key=f"btn_edit_{no_p}"):
+                        if st.button("✏️ Edit", key=f"btn_edit_{no_p}", use_container_width=True):
                             st.session_state[f"edit_mode_{no_p}"] = True
 
                 if st.session_state.get(f"edit_mode_{no_p}", False):
@@ -494,7 +461,7 @@ else:
                                 res_upd = run_apps_script("simpanPeserta", K["id"], no_p, data_update)
                                 p.update(res_upd)
                                 st.session_state[f"edit_mode_{no_p}"] = False
-                                st.session_state.selected_peserta = None # AUTO CLOSE
+                                st.session_state.selected_peserta = None
                                 st.success("Tersimpan!")
                                 st.rerun()
                         with c_canc:
