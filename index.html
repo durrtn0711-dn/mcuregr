@@ -14,6 +14,7 @@
             --green: #92D050;
             --yellow: #F4F207;
             --red: #FF0000;
+            --blue: #1E88E5;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -183,7 +184,7 @@
         <div id="participantList"></div>
 
         <!-- TOMBOL EXPORT EXCEL 4 SHEET DENGAN STYLING BLOK WARNA & BORDER PENUH -->
-        <button onclick="exportToExcel4Sheets()" style="background:var(--green); color:#000; margin-top: 10px; margin-bottom: 10px;">📥 Unduh File Excel Final (4 Sheet)</button>
+        <button onclick="exportToExcel4Sheets()" style="background:var(--blue); color:#fff; margin-top: 10px; margin-bottom: 10px;">📥 Unduh File Excel Final (4 Sheet)</button>
 
         <!-- MODAL PILIH BEDA SAAT TUTUP MCU -->
         <div id="conflictBox" class="card hidden" style="border: 2px solid var(--yellow); margin-top:10px;">
@@ -451,119 +452,104 @@
         filterParticipants();
     }
 
-    // EXPORT EXCEL 4 SHEET (STYLING LENGKAP: BLOK WARNA SEL PENUH, BORDER, ALIGNMENT, PENDAFTARAN LANGSUNG TABEL)
+    // Format keterangan haid: "HAID+3" -> "H+3", "HAID" -> "HAID", "HAMIL" -> "HAMIL"
+    function fmtHaid(v) {
+        if (!v) return "";
+        v = String(v).trim().toUpperCase();
+        let m = v.match(/^HAID\s*\+\s*(.+)$/);
+        if (m) return "H+" + m[1].trim();
+        return v;
+    }
+
+    // EXPORT EXCEL 4 SHEET
+    // Warna: KUNING = hadir, IJO = form terkumpul, MERAH = tidak hadir
+    // NO selalu mengikuti nomor dari data pendaftaran (tidak dinomori ulang)
     function exportToExcel4Sheets() {
         let K = appData.activeKegiatan;
         if (!K || !K.rows) return;
 
         let wb = XLSX.utils.book_new();
         let kodePt = String(K.kode || "").toUpperCase();
+        let isSMJ = kodePt.includes("SMJ");
 
-        let headers = kodePt.includes("SMJ") 
-            ? ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD', 'HAID/HAMIL']
+        let headers = isSMJ
+            ? ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR (BLN-TGL-THN)', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD', 'HAID/HAMIL']
             : ['NO', 'NO RM', 'NAMA', 'NO. URUT MCU', 'BAGIAN', 'JABATAN', 'TEMPAT LAHIR', 'TANGGAL LAHIR', 'USIA', 'JENIS KELAMIN', 'NO HP', 'NO. KTP', 'TTD', 'HAID/HAMIL'];
+        let nCols = headers.length;
+        let namaCol = 2;
+        let judul = isSMJ ? "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY" : "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA";
+        let colWidths = isSMJ
+            ? [6, 18, 29, 7, 16, 7, 19, 15, 14, 10, 13]
+            : [6, 18, 29, 14, 18, 14, 15, 14, 7, 14, 15, 19, 10, 13];
 
-        let thinBorder = {
-            top: { style: "thin", color: { rgb: "000000" } },
-            bottom: { style: "thin", color: { rgb: "000000" } },
-            left: { style: "thin", color: { rgb: "000000" } },
-            right: { style: "thin", color: { rgb: "000000" } }
-        };
+        let thin = { style: "thin", color: { rgb: "000000" } };
+        let thinBorder = { top: thin, bottom: thin, left: thin, right: thin };
 
-        // 1. Sheet: MCU KLINIK JEPARA
-        let rawData = [
-            [kodePt.includes("SMJ") ? "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY" : "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA"],
-            [`TANGGAL ${K.tgl}`],
-            [],
-            headers
-        ];
-        K.rows.forEach(p => {
-            rawData.push([
-                p.no, p.rm, p.nama, p.jk || "", p.tgl || "", p.usia || "", p.nik || "", p.hp || "", p.jenis || "", p.no, p.haid || ""
-            ]);
-        });
-        let wsRaw = XLSX.utils.aoa_to_sheet(rawData);
-        
-        for (let r = 0; r < rawData.length; r++) {
-            for (let c = 0; c < headers.length; c++) {
-                let cellRef = XLSX.utils.encode_cell({ r: r, c: c });
-                if (!wsRaw[cellRef]) continue;
-                let align = (c === 2) ? "left" : "center";
-                wsRaw[cellRef].s = {
-                    alignment: { horizontal: align, vertical: "center" },
-                    border: thinBorder,
-                    font: (r < 3 || r === 3) ? { bold: true } : { bold: false }
-                };
-                if (r === 3) {
-                    wsRaw[cellRef].fill = { fgColor: { rgb: "D9D9D9" } };
-                }
+        function rowValues(p) {
+            if (isSMJ) {
+                return [p.no, p.rm, p.nama, p.jk || "", p.tgl || "", p.usia || "", p.nik || "", p.hp || "", p.jenis || "", p.no, fmtHaid(p.haid)];
             }
+            let g = (...k) => { for (let x of k) if (p[x]) return p[x]; return ""; };
+            let urut = g("urut", "noUrut", "no_urut", "urutMcu");
+            if (!urut) {
+                let m = String(K.tgl || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+                if (m) urut = `${m[3]}${m[2]}${m[1]}-${String(p.no).padStart(3, "0")}`;
+            }
+            let jkFull = String(p.jk || "").toUpperCase();
+            jkFull = jkFull === "P" ? "PEREMPUAN" : (jkFull === "L" ? "LAKI-LAKI" : jkFull);
+            return [p.no, p.rm, p.nama, urut, g("bagian"), g("jabatan"), g("tmpLahir", "tempatLahir", "tmp"), p.tgl || "", p.usia || "",
+                    jkFull, p.hp || "", p.nik || "", p.no, fmtHaid(p.haid)];
         }
-        XLSX.utils.book_append_sheet(wb, wsRaw, "MCU KLINIK JEPARA");
 
-        // Helper untuk sheet PENDAFTARAN, HADIR, TIDAK HADIR
-        function createStyledSheet(sheetName, subsetRows, isPendaftaran = false, skipHeaderInfo = false) {
-            let sData = [];
-            if (!skipHeaderInfo) {
-                sData.push(
-                    [kodePt.includes("SMJ") ? "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY" : "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA"],
-                    [`TANGGAL ${K.tgl}`],
-                    []
-                );
-            }
-            sData.push(headers);
-            
-            subsetRows.forEach(p => {
-                sData.push([
-                    p.no, p.rm, p.nama, p.jk || "", p.tgl || "", p.usia || "", p.nik || "", p.hp || "", p.jenis || "", p.no, p.haid || ""
-                ]);
-            });
+        // Warna per peserta: kumpul = ijo, hadir = kuning, sisanya merah
+        function warna(p, sheetName) {
+            if (sheetName === "TIDAK HADIR") return "FF0000";
+            if (p.kumpul) return "92D050";
+            if (p.hadir) return "F4F207";
+            return "FF0000";
+        }
+
+        function buildSheet(sheetName, subsetRows, withColor) {
+            let sData = [[judul], [`TANGGAL ${K.tgl}`], [], headers];
+            subsetRows.forEach(p => sData.push(rowValues(p)));
 
             let ws = XLSX.utils.aoa_to_sheet(sData);
-            let headerRowIndex = skipHeaderInfo ? 0 : 3;
+            ws["!merges"] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: nCols - 1 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: nCols - 1 } }
+            ];
+            ws["!cols"] = colWidths.map(w => ({ wch: w }));
 
             for (let r = 0; r < sData.length; r++) {
-                let pData = skipHeaderInfo ? (r > 0 ? subsetRows[r - 1] : null) : (r > 3 ? subsetRows[r - 4] : null);
-                let hexColor = "D9D9D9";
-
-                if (r > headerRowIndex && pData) {
-                    if (isPendaftaran) {
-                        if (pData.kumpul) hexColor = "92D050";
-                        else if (pData.hadir) hexColor = "F4F207";
-                        else hexColor = "FF0000";
-                    } else {
-                        hexColor = (sheetName === "HADIR") ? "92D050" : "FF0000";
-                    }
-                }
-
-                for (let c = 0; c < headers.length; c++) {
-                    let cellRef = XLSX.utils.encode_cell({ r: r, c: c });
-                    if (!ws[cellRef]) continue;
-                    let align = (c === 2) ? "left" : "center";
-                    
-                    ws[cellRef].s = {
-                        alignment: { horizontal: align, vertical: "center" },
-                        border: thinBorder,
-                        font: (r <= headerRowIndex) ? { bold: true } : { bold: false }
+                if (r === 2) continue;
+                for (let c = 0; c < nCols; c++) {
+                    let ref = XLSX.utils.encode_cell({ r: r, c: c });
+                    if (!ws[ref]) ws[ref] = { t: "s", v: "" };
+                    let st = {
+                        font: { name: "Calibri", sz: 11, bold: r <= 3 },
+                        alignment: { horizontal: (c === namaCol && r > 3) ? "left" : "center", vertical: "center", wrapText: true }
                     };
-
-                    if (r === headerRowIndex) {
-                        ws[cellRef].fill = { fgColor: { rgb: "D9D9D9" } };
-                    } else if (r > headerRowIndex) {
-                        ws[cellRef].fill = { fgColor: { rgb: hexColor } };
+                    if (r === 3) {
+                        st.border = thinBorder;
+                        st.fill = { patternType: "solid", fgColor: { rgb: "D9D9D9" } };
+                    } else if (r > 3) {
+                        st.border = thinBorder;
+                        if (withColor) {
+                            st.fill = { patternType: "solid", fgColor: { rgb: warna(subsetRows[r - 4], sheetName) } };
+                        }
                     }
+                    ws[ref].s = st;
                 }
             }
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
         }
 
-        // Sheet PENDAFTARAN khusus tanpa judul PT dan tanggal di atasnya (langsung tabel)
-        createStyledSheet("PENDAFTARAN", K.rows, true, true);
-        createStyledSheet("HADIR", K.rows.filter(p => p.hadir), false, false);
-        createStyledSheet("TIDAK HADIR", K.rows.filter(p => !p.hadir), false, false);
+        buildSheet("MCU KLINIK JEPARA", K.rows, false);
+        buildSheet("PENDAFTARAN", K.rows, true);
+        buildSheet("HADIR", K.rows.filter(p => p.hadir), true);
+        buildSheet("TIDAK HADIR", K.rows.filter(p => !p.hadir), true);
 
-        let fileName = `MCU_${K.kode}_${K.tgl}.xlsx`;
-        XLSX.writeFile(wb, fileName);
+        XLSX.writeFile(wb, `MCU_${K.kode}_${K.tgl}.xlsx`);
     }
 
     // LIVE SEARCH INSTAN DENGAN FULL BLOK WARNA BACKGROUND CARD
@@ -604,7 +590,7 @@
             
             let htmlDetails = `<b>RM:</b> ${p.rm} | <b>NIK:</b> ${p.nik || '-'}<br>` +
                               `<b>Tgl Lahir:</b> ${p.tgl} | <b>Usia:</b> ${p.usia || '-'}thn | <b>JK:</b> ${p.jk}<br>`;
-            if (p.haid) htmlDetails += `<span style="color:var(--yellow);"><b>Ket:</b> ${p.haid}</span><br>`;
+            if (p.haid) htmlDetails += `<span style="color:var(--yellow);"><b>Ket:</b> ${fmtHaid(p.haid)}</span><br>`;
             
             if (K.status === "DRAFT") {
                 if (!p.hadir) {
