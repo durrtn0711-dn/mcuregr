@@ -35,13 +35,17 @@ def run_apps_script(fn, *args):
         "args": list(args)
     }
     
-    response = requests.post(url, json=payload, timeout=15)
-    data = response.json()
+    response = requests.post(url, json=payload, timeout=15, allow_redirects=True)
+    
+    try:
+        data = response.json()
+    except Exception:
+        # Kalau bukan JSON, tampilkan teks HTML/error asli dari Google biar ketahuan penyebabnya
+        raise Exception(f"Server tidak mengembalikan JSON. Status code: {response.status_code}. Respon server: {response.text[:200]}")
     
     if not data.get("ok"):
         raise Exception(data.get("error", "Terjadi kesalahan pada server Apps Script."))
     return data.get("data")
-
 # --- HELPER FUNGSIONAL ---
 def load_home_data():
     home_data = run_apps_script("getHome")
