@@ -1,4 +1,5 @@
 import streamlit as st
+import requests
 import pandas as pd
 import json
 import re
@@ -7,224 +8,295 @@ from datetime import datetime
 # Setup Halaman
 st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="centered")
 
-# --- INITIALIZATION / STATE (Menggantikan localStorage & State JS) ---
+# --- INITIALIZATION STATE (Menggantikan localStorage JS) ---
+if "url" not in st.session_state:
+    st.session_state.url = ""
+if "pin" not in st.session_state:
+    st.session_state.pin = ""
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "daftar_pt" not in st.session_state:
+    st.session_state.daftar_pt = []
 if "kegiatan_list" not in st.session_state:
     st.session_state.kegiatan_list = []
-if "active_keg_id" not in st.session_state:
-    st.session_state.active_keg_id = None
-if "peserta_db" not in st.session_state:
-    # Key: keg_id, Value: List of Dict Peserta
-    st.session_state.peserta_db = {}
+if "active_kegiatan" not in st.session_state:
+    st.session_state.active_kegiatan = None
 
-# Daftar Perusahaan (Menggantikan sheet PENGATURAN)
-DAFTAR_PT = ["PT A", "PT B", "PT C", "MCU KLINIK JEPARA"]
+# --- FUNGSI RUN (Sama persis fungsi run() di JS untuk panggil Apps Script) ---
+def run_apps_script(fn, *args):
+    url = st.session_state.url
+    pin = st.session_state.pin
+    if not url or not pin:
+        raise Exception("URL Server atau PIN belum diset.")
+    
+    payload = {
+        "pin": pin,
+        "fn": fn,
+        "args": list(args)
+    }
+    
+    response = requests.post(url, json=payload, timeout=15)
+    data = response.json()
+    
+    if not data.get("ok"):
+        raise Exception(data.get("error", "Terjadi kesalahan pada server Apps Script."))
+    return data.get("data")
 
-# --- HELPER FUNCTIONS ---
-def get_usia(tgl_lahir):
-    if not tgl_lahir:
+# --- HELPER FUNGSIONAL ---
+def load_home_data():
+    home_data = run_apps_script("getHome")
+    # Ambil daftar PT dari sheet PENGATURAN
+    st.session_state.daftar_pt = [p["kode"] for p in home_data.get("pt", [])]
+    # Ambil daftar kegiatan yang ada
+    st.session_state.kegiatan_list = home_data.get("keg", [])
+
+def format_tgl(tgl_str):
+    if not tgl_str:
         return "-"
-    try:
-        born = datetime.strptime(str(tgl_lahir), "%Y-%m-%d")
-        today = datetime.today()
-        return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-    except Exception:
-        return "-"
+    parts = str(tgl_str).split("-")
+    if len(parts) == 3:
+        return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    return str(tgl_str)
 
-# --- 1. HALAMAN LOGIN ---
+# --- 1. HALAMAN LOGIN (Memeriksa URL & PIN ke Server) ---
 if not st.session_state.logged_in:
     st.title("🏥 MCU Registrasi")
     with st.form("login_form"):
-        st.subheader("Masuk Server / System")
-        server_url = st.text_input("Alamat Server (URL App)", value="https://script.google.com/macros/s/.../exec")
-        pin = st.text_input("PIN", type="password")
-        submit_login = st.form_submit_button("Masuk")
+        st.subheader("Masuk")
+        st.caption("Isi sekali, tersimpan di sesi ini.")
+        
+        input_url = st.text_input("Alamat server (URL web app Apps Script)")
+        input_pin = st.text_input("PIN", type="password")
+        btn_login = st.form_submit_button("Masuk")
 
-        if submit_login:
-            if pin == "1234":  # Ganti dengan logika PIN Anda
-                st.session_state.logged_in = True
-                st.success("Berhasil masuk!")
-                st.rerun()
+        if btn_login:
+            if not input_url.startswith("https://script.google.com/"):
+                st.error("Alamat server harus diawali https://script.google.com/")
+            elif not input_pin:
+                st.error("Isi PIN.")
             else:
-                st.error("PIN salah, coba lagi.")
+                st.session_state.url = input_url.strip()
+                st.session_state.pin = input_pin.strip()
+                try:
+                    with st.spinner("Memeriksa PIN ke server..."):
+                        load_home_data()
+                        st.session_state.logged_in = True
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Gagal masuk: {e}")
     st.stop()
 
-# --- 2. NAVIGASI ATAS & LOGOUT ---
-col_head1, col_head2 = st.columns([4, 1])
-with col_head1:
+# --- 2. HEADER & NAVIGASI (Keluar / Ganti PIN) ---
+col_h1, col_h2 = st.columns([3, 1])
+with col_h1:
     st.title("🏥 MCU Registrasi")
-with col_head2:
-    if st.button("Keluar"):
+with col_h2:
+    if st.button("Keluar / Ganti PIN", type="secondary"):
         st.session_state.logged_in = False
-        st.session_state.active_keg_id = None
+        st.session_state.pin = ""
+        st.session_state.active_kegiatan = None
         st.rerun()
 
-# --- 3. HALAMAN UTAMA (HOME / DASHBOARD KEGIATAN) ---
-if st.session_state.active_keg_id is None:
-    st.subheader("Mulai Kegiatan atau Tambah Peserta")
-    
-    with st.expander("➕ Upload File Excel Mentah Baru", expanded=True):
-        pt_pilihan = st.selectbox("Pilih Perusahaan", DAFTAR_PT)
+# --- 3. HALAMAN UTAMA (HOME) ---
+if st.session_state.active_kegiatan is None:
+    st.subheader("Mulai kegiatan atau tambah peserta")
+    st.caption("Pilih perusahaan, tanggal, lalu file Excel mentah.")
+
+    # Pilih PT (Otomatis sesuai aturan Sheet PENGATURAN)
+    if not st.session_state.daftar_pt:
+        st.error("Daftar perusahaan kosong. Cek sheet PENGATURAN atau jalankan siapkan() lagi di Apps Script.")
+    else:
+        pt_pilihan = st.selectbox("Pilih Perusahaan / PT", st.session_state.daftar_pt)
         tgl_kegiatan = st.date_input("Tanggal Kegiatan", datetime.now())
-        uploaded_file = st.file_uploader("Unggah File Excel Mentah (.xlsx, .xls)", type=["xlsx", "xls"])
+        uploaded_file = st.file_uploader("Upload File Excel Mentah (.xlsx, .xls)", type=["xlsx", "xls"])
+
+        if uploaded_file and st.button("Periksa file", use_container_width=True):
+            with st.spinner("Membaca file..."):
+                try:
+                    excel_data = pd.read_excel(uploaded_file, sheet_name=None, header=None)
+                    payload_sheets = []
+                    
+                    SKIP_REGEX = re.compile(r"^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$", re.I)
+                    
+                    for sheet_name, df in excel_data.items():
+                        if not SKIP_REGEX.match(sheet_name):
+                            rows = df.fillna("").values.tolist()
+                            # Ambil maksimal 40 kolom (sama persis JS: r.slice(0,40))
+                            rows_trimmed = [r[:40] for r in rows]
+                            payload_sheets.append({
+                                "name": sheet_name,
+                                "rows": rows_trimmed
+                            })
+                    
+                    # Panggil previewUpload ke Apps Script
+                    tgl_str = tgl_kegiatan.strftime("%Y-%m-%d")
+                    res = run_apps_script("previewUpload", pt_pilihan, tgl_str, payload_sheets)
+                    
+                    st.session_state.temp_upload = {
+                        "kode": pt_pilihan,
+                        "tgl": tgl_str,
+                        "payload": payload_sheets,
+                        "res": res
+                    }
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    # Display Preview Upload
+    if "temp_upload" in st.session_state and st.session_state.temp_upload:
+        up = st.session_state.temp_upload
+        r = up["res"]
+        st.info(f"**{r['total']} peserta di file** | {r['baru']} baru, {r['lewat']} dilewati karena sudah ada, {len(r['cek'])} perlu dicek")
         
-        if uploaded_file and st.button("Periksa & Import File"):
-            try:
-                # Membaca Sheet Excel (Menggantikan library SheetJS / XLSX JS)
-                excel_data = pd.read_excel(uploaded_file, sheet_name=None)
-                total_peserta = 0
-                new_rows = []
-                
-                # Header normalisasi
-                for sheet_name, df in excel_data.items():
-                    if re.match(r"^(PENDAFTARAN|HADIR|TIDAK HADIR|DATA MENTAH)$", sheet_name, re.I):
-                        continue
-                    for idx, row in df.iterrows():
-                        total_peserta += 1
-                        new_rows.append({
-                            "no": len(new_rows) + 1,
-                            "nama": str(row.get("NAMA", row.get("Nama", f"Peserta {total_peserta}"))),
-                            "rm": str(row.get("NO RM", row.get("RM", f"RM-{total_peserta:04d}"))),
-                            "nik": str(row.get("NIK", "")),
-                            "tgl": str(row.get("TGL LAHIR", "")),
-                            "jk": str(row.get("JK", "L")),
-                            "hadir": False,
-                            "kumpul": False,
-                            "haid": "",
-                            "cek": ""
-                        })
-                
-                # Simpan kegiatan baru
-                keg_id = f"{pt_pilihan}_{tgl_kegiatan.strftime('%Y%m%d')}"
-                st.session_state.kegiatan_list.append({
-                    "id": keg_id,
-                    "kode": pt_pilihan,
-                    "tgl": str(tgl_kegiatan),
-                    "status": "DRAFT"
-                })
-                st.session_state.peserta_db[keg_id] = new_rows
-                st.success(f"Berhasil mengunggah {len(new_rows)} peserta!")
+        if r['cek']:
+            for c in r['cek']:
+                st.warning(f"{c['no']}. {c['nama']}: {c['masalah']}")
+        
+        c_simpan, c_batal = st.columns(2)
+        with c_simpan:
+            if st.button(f"Simpan {r['baru']} peserta", disabled=(r['baru'] == 0)):
+                try:
+                    with st.spinner("Menyimpan ke Google Sheets..."):
+                        s = run_apps_script("simpanUpload", up["kode"], up["tgl"], up["payload"])
+                        st.session_state.active_kegiatan = run_apps_script("getKegiatan", s["keg"])
+                        del st.session_state.temp_upload
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Gagal menyimpan: {e}")
+        with c_batal:
+            if st.button("Batal"):
+                del st.session_state.temp_upload
                 st.rerun()
-            except Exception as e:
-                st.error(f"Gagal membaca file Excel: {e}")
 
     st.divider()
-    st.subheader("📋 Daftar Kegiatan MCU")
+    st.subheader("Kegiatan")
+    
     if not st.session_state.kegiatan_list:
-        st.info("Belum ada kegiatan. Upload data mentah untuk memulai.")
+        st.caption("Belum ada kegiatan. Upload data mentah untuk memulai.")
     else:
-        for keg in st.session_state.kegiatan_list:
-            col_a, col_b, col_c = st.columns([3, 1, 1])
-            with col_a:
-                st.write(f"**{keg['kode']}** · {keg['tgl']}")
-            with col_b:
-                st.caption(f"Status: {keg['status']}")
-            with col_c:
-                if st.button("Buka", key=f"open_{keg['id']}"):
-                    st.session_state.active_keg_id = keg['id']
-                    st.rerun()
+        for g in st.session_state.kegiatan_list:
+            col_k1, col_k2 = st.columns([3, 1])
+            with col_k1:
+                st.write(f"**{g['kode']}** {format_tgl(g['tgl'])}")
+            with col_k2:
+                status_label = "Draft" if g['status'] == "DRAFT" else "Ditutup"
+                if st.button(f"Buka ({status_label})", key=f"keg_{g['id']}"):
+                    with st.spinner("Memuat kegiatan..."):
+                        st.session_state.active_kegiatan = run_apps_script("getKegiatan", g['id'])
+                        st.rerun()
 
-    if st.button("Reset Semua Data", type="primary"):
-        st.session_state.kegiatan_list = []
-        st.session_state.peserta_db = {}
-        st.rerun()
+    st.divider()
+    if st.button("Reset semua data", type="primary", use_container_width=True):
+        if st.checkbox("Saya yakin ingin menghapus SEMUA kegiatan & peserta"):
+            run_apps_script("resetSemua")
+            load_home_data()
+            st.rerun()
 
 # --- 4. HALAMAN DETAIL KEGIATAN & PRESENSI ---
 else:
-    keg_id = st.session_state.active_keg_id
-    keg_info = next((k for k in st.session_state.kegiatan_list if k["id"] == keg_id), None)
-    peserta_list = st.session_state.peserta_db.get(keg_id, [])
+    K = st.session_state.active_kegiatan
+    rows = K.get("rows", [])
 
-    if st.button("⬅️ Kembali ke Daftar Kegiatan"):
-        st.session_state.active_keg_id = None
-        st.rerun()
+    col_b1, col_b2 = st.columns([1, 3])
+    with col_b1:
+        if st.button("⬅️ Kembali"):
+            st.session_state.active_kegiatan = None
+            load_home_data()
+            st.rerun()
+    with col_b2:
+        status_text = " · Ditutup" if K.get("status") == "DITUTUP" else ""
+        st.subheader(f"{K['kode']} · {format_tgl(K['tgl'])}{status_text}")
 
-    st.subheader(f"{keg_info['kode']} · {keg_info['tgl']} ({keg_info['status']})")
+    # Search Bar
+    q = st.text_input("🔍 Cari nama, No RM, NIK, atau nomor TTD", "").strip().upper()
 
-    # Metrics Stat (Sesuai elemen stat di HTML)
-    total_p = len(peserta_list)
-    hadir_p = len([p for p in peserta_list if p["hadir"]])
-    kumpul_p = len([p for p in peserta_list if p["kumpul"]])
+    # Metrics Total / Hadir / Berkas
+    sT = len(rows)
+    sH = len([p for p in rows if p.get("hadir")])
+    sK = len([p for p in rows if p.get("kumpul")])
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("Peserta", total_p)
-    m2.metric("Hadir", hadir_p)
-    m3.metric("Berkas Terkumpul", kumpul_p)
+    m1.metric("Peserta", sT)
+    m2.metric("Hadir", sH)
+    m3.metric("Berkas", sK)
 
-    # Search Filter
-    query = st.text_input("🔍 Cari Nama, No RM, NIK, atau No. TTD", "")
-
-    # Filter Peserta
-    filtered_peserta = peserta_list
-    if query:
-        q = query.strip().upper()
-        filtered_peserta = [
-            p for p in peserta_list
-            if q in str(p["no"]) or q in p["nama"].upper() or q in p["rm"].upper() or q in str(p["nik"])
-        ]
+    # Filter Peserta (Logic Cocok JS)
+    filtered = []
+    for p in rows:
+        if not q:
+            filtered.append(p)
+        else:
+            if q.isdigit() and int(q) == p.get("no"):
+                filtered.append(p)
+            elif (q in p.get("nama", "").upper() or 
+                  q in p.get("rm", "").upper() or 
+                  q in str(p.get("nik", ""))):
+                filtered.append(p)
 
     st.divider()
 
-    # Tampilan Daftar Peserta (Cards)
-    for p in filtered_peserta:
-        status_str = "Berkas ✓" if p["kumpul"] else ("Hadir" if p["hadir"] else "Belum Hadir")
-        bg_color = "🟢" if p["kumpul"] else ("🟡" if p["hadir"] else "⚪")
+    # Render List Peserta
+    for p in filtered:
+        is_draft = K.get("status") == "DRAFT"
+        hadir = p.get("hadir")
+        kumpul = p.get("kumpul")
         
-        with st.expander(f"{bg_color} {p['no']}. {p['nama']} ({p['rm']}) — {status_str}"):
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                st.write(f"**No RM:** {p['rm']}")
-                st.write(f"**NIK:** {p['nik']}")
-                st.write(f"**Tgl Lahir:** {p['tgl']} (Usia: {get_usia(p['tgl'])})")
-            with col_d2:
-                st.write(f"**Jenis Kelamin:** {'Laki-laki' if p['jk'] == 'L' else 'Perempuan'}")
-                if p["jk"] == "P":
-                    st.write(f"**Haid/Hamil:** {p['haid'] if p['haid'] else 'Tidak ada'}")
+        # Penentuan Warna Card (Sesuai CSS HTML)
+        badge = ""
+        if K.get("status") == "DITUTUP" and not hadir:
+            badge = "🔴 Tidak hadir"
+        elif kumpul:
+            badge = "🟢 Berkas ✓"
+        elif hadir:
+            badge = "🟡 Hadir"
 
-            # Tombol Aksi Presensi per Peserta
-            if keg_info["status"] == "DRAFT":
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    if not p["hadir"]:
-                        if p["jk"] == "P":
-                            haid_opt = st.radio("Status Haid/Hamil", ["Tidak ada", "HAID", "HAMIL"], key=f"h_{p['no']}")
-                        if st.button("Set Hadir", key=f"btn_h_{p['no']}"):
-                            p["hadir"] = True
-                            if p["jk"] == "P":
-                                p["haid"] = "" if haid_opt == "Tidak ada" else haid_opt
+        with st.expander(f"{p['no']}. {p['nama']} ({p['rm']}) {badge}"):
+            st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
+            st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
+            if p.get("cek"):
+                st.warning(f"Perlu dicek dengan KTP: {p['cek']}")
+
+            if is_draft:
+                col_act1, col_act2 = st.columns(2)
+                with col_act1:
+                    if not hadir:
+                        haid_val = ""
+                        if p.get("jk") == "P":
+                            haid_val = st.radio("Haid/Hamil", ["Tidak ada", "HAID", "HAMIL"], key=f"haid_{p['no']}")
+                            haid_val = "" if haid_val == "Tidak ada" else haid_val
+                        
+                        if st.button("Hadir", key=f"btn_h_{p['no']}"):
+                            res_p = run_apps_script("setHadir", K["id"], p["no"], haid_val)
+                            p.update(res_p)
                             st.rerun()
-                with c2:
-                    if p["hadir"] and not p["kumpul"]:
-                        if st.button("Berkas Terkumpul", key=f"btn_k_{p['no']}"):
-                            p["kumpul"] = True
+                with col_act2:
+                    if hadir and not kumpul:
+                        if st.button("Sudah mengumpulkan", key=f"btn_k_{p['no']}"):
+                            res_p = run_apps_script("setKumpul", K["id"], p["no"])
+                            p.update(res_p)
                             st.rerun()
 
     st.divider()
 
-    # Tombol Aksi Kegiatan (Close MCU / Re-open)
-    if keg_info["status"] == "DRAFT":
-        if st.button("➕ Tambah Peserta Manual", use_container_width=True):
-            new_no = len(peserta_list) + 1
-            peserta_list.append({
-                "no": new_no,
-                "nama": f"Peserta Manual {new_no}",
-                "rm": f"RM-M-{new_no:03d}",
-                "nik": "",
-                "tgl": "",
-                "jk": "L",
-                "hadir": True,
-                "kumpul": False,
-                "haid": "",
-                "cek": ""
-            })
-            st.rerun()
+    # Tombol Aksi Bawah (Close MCU / Re-open / Reset)
+    if K.get("status") == "DRAFT":
+        if st.button("➕ Tambah peserta manual", use_container_width=True):
+            st.warning("Gunakan menu tambah manual pada Apps Script.")
 
         if st.button("🔒 Close MCU", type="primary", use_container_width=True):
-            keg_info["status"] = "DITUTUP"
-            st.success("Kegiatan MCU telah ditutup!")
+            res_close = run_apps_script("tutup", K["id"])
+            st.session_state.active_kegiatan = res_close
+            st.success(f"MCU {K['kode']} berhasil ditutup!")
             st.rerun()
     else:
-        if st.button("🔓 Buka Lagi MCU untuk Diedit", use_container_width=True):
-            keg_info["status"] = "DRAFT"
+        if K.get("url"):
+            st.markdown(f"[📂 Buka File Final]({K['url']})", unsafe_allow_group=True)
+        if st.button("🔓 Buka lagi untuk diedit", use_container_width=True):
+            st.session_state.active_kegiatan = run_apps_script("bukaLagi", K["id"])
+            st.rerun()
+
+    if st.button("Reset data MCU ini", type="secondary", use_container_width=True):
+        if st.checkbox("Hapus seluruh peserta kegiatan ini?"):
+            run_apps_script("resetKegiatan", K["id"])
+            st.session_state.active_kegiatan = None
+            load_home_data()
             st.rerun()
