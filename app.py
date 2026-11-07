@@ -12,21 +12,45 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS PRESISI SUPER RAPAT UNTUK LAYAR HP ---
+# --- CSS PEMICU RAPAT TOTAL (MEMANGKAS SEMUA JARAK / SPASI KOSONG) ---
 st.markdown("""
 <style>
-/* Reset Padding Layar HP */
+/* Reset Padding Utama Layar HP */
 .block-container {
-    padding-top: 0.3rem !important;
-    padding-bottom: 1rem !important;
-    padding-left: 0.2rem !important;
-    padding-right: 0.2rem !important;
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.5rem !important;
+    padding-left: 0.15rem !important;
+    padding-right: 0.15rem !important;
 }
 
-/* Hilangkan Jarak Berlebih Antar Komponen */
-div[data-testid="stVerticalBlock"] > div {
+/* Rapatkan Semua Vertical Block dan Element Container */
+div[data-testid="stVerticalBlock"] {
     gap: 0.15rem !important;
+}
+div[data-testid="stVerticalBlock"] > div {
+    gap: 0.1rem !important;
     margin-bottom: 0px !important;
+}
+.element-container {
+    margin-bottom: 0.1rem !important;
+}
+
+/* Rapatkan Judul & Header */
+h1, h2, h3, h4 {
+    margin-top: 0.1rem !important;
+    margin-bottom: 0.1rem !important;
+    padding: 0px !important;
+}
+
+/* Rapatkan Input Form, Selectbox, Date, Uploader */
+div[data-testid="stSelectbox"], div[data-testid="stDateInput"], div[data-testid="stFileUploader"], div[data-testid="stTextInput"] {
+    margin-bottom: 0.15rem !important;
+}
+
+/* Rapatkan Garis Pembatas (Divider) */
+hr {
+    margin-top: 0.3rem !important;
+    margin-bottom: 0.3rem !important;
 }
 
 /* Badge Statistik Sejajar */
@@ -34,24 +58,48 @@ div[data-testid="stVerticalBlock"] > div {
     background-color: #1e1e1e;
     border: 1px solid #333;
     border-radius: 6px;
-    padding: 6px 10px;
+    padding: 4px 8px;
     display: flex;
     justify-content: space-around;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     font-size: 0.85rem;
     color: #ffffff;
 }
 .stat-num {
     font-weight: bold;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
 }
 
-/* Styling Expander Agar Rapat di HP */
+/* Padatkan Expander Peserta */
 div[data-testid="stExpander"] {
     border: 1px solid #444 !important;
     border-radius: 6px !important;
-    margin-bottom: 3px !important;
+    margin-bottom: 2px !important;
+}
+div[data-testid="stExpander"] details {
+    padding: 0px !important;
+}
+div[data-testid="stExpander"] summary {
+    padding: 6px 8px !important;
+    font-size: 0.88rem !important;
+    font-weight: bold !important;
+}
+div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
+    padding: 2px 6px 6px 6px !important;
+    gap: 0.05rem !important;
+}
+
+/* Radio Button Horizontal */
+div[data-testid="stRadio"] > div {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 15px !important;
+}
+
+div[data-testid="stExpander"] p {
+    font-size: 0.82rem !important;
+    margin-bottom: 2px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -280,7 +328,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI (EXPANDER BAWAH TANPA TULISAN STATUS)
+# 4. DETAIL KEGIATAN & PRESENSI (SUPER PADAT & RAPAT)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -324,14 +372,13 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # RENDER BARIS NAMA PESERTA MENGGUNAKAN EXPANDER BAWAH
+    # RENDER BARIS NAMA PESERTA DENGAN EXPANDER SUPER PADAT
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
         no_p = p['no']
         
-        # Penanda Titik Warna Tanpa Tulisan Status
         if K.get("status") == "DITUTUP" and not hadir:
             icon_status = "🔴"
         elif kumpul:
@@ -341,32 +388,28 @@ else:
         else:
             icon_status = "⚪"
 
-        # Label Bersih: [No]. [Ikon Titik] [Nama Lengkap] (Tanpa No RM, Tanpa Tulisan Status)
         exp_label = f"{no_p}. {icon_status} {p['nama']}"
 
         with st.expander(exp_label):
-            st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
-            st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
+            st.markdown(f"**RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
+            st.markdown(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')}thn | **JK:** {p.get('jk')}")
             
             err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
             if err_nik:
                 st.error(err_nik)
 
             if p.get("haid"):
-                st.warning(f"Keterangan: **{p['haid']}**")
+                st.warning(f"Ket: **{p['haid']}**")
             if p.get("cek"):
-                st.error(f"Perlu dicek dengan KTP: {p['cek']}")
-
-            st.divider()
+                st.error(f"Cek KTP: {p['cek']}")
 
             if is_draft:
                 if not hadir:
-                    st.subheader("Set Kehadiran")
                     haid_final_val = ""
                     jk_val = str(p.get("jk", "")).upper()
                     
                     if jk_val in ["P", "PEREMPUAN"]:
-                        opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"exp_rad_{no_p}")
+                        opt_h = st.radio("Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"exp_rad_{no_p}")
                         if opt_h == "HAID":
                             hari_h = st.selectbox("Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"exp_sel_{no_p}")
                             if hari_h == "Lainnya":
@@ -386,8 +429,8 @@ else:
                         run_apps_script("setKumpul", K["id"], no_p)
                         st.rerun()
 
-            # FORM EDIT
-            with st.expander("✏️ Edit Data Peserta"):
+            # FORM EDIT DIPADATKAN
+            with st.expander("✏️ Edit Data"):
                 with st.form(key=f"form_exp_edit_{no_p}"):
                     e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
                     e_rm = st.text_input("No RM", value=p.get("rm", ""))
@@ -395,7 +438,7 @@ else:
                     e_tgl = st.text_input("Tgl Lahir (YYYY-MM-DD)", value=str(p.get("tgl", "")))
                     e_jk = st.selectbox("Jenis Kelamin", ["L", "P"], index=0 if str(p.get("jk","")).upper().startswith("L") else 1)
                     
-                    if st.form_submit_button("💾 Simpan Perubahan", use_container_width=True):
+                    if st.form_submit_button("💾 Simpan", use_container_width=True):
                         data_update = {
                             "nama": e_nama,
                             "rm": e_rm,
