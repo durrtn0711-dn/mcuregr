@@ -10,13 +10,11 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 # Setup Halaman
 st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="centered")
 
-# URL DEFAULT OTOMATIS
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS SUPER RINGKAS KHUSUS TAMPILAN HP (TANPA PADDING / SPASI BERLEBIH) ---
+# --- CSS SUPER PRESISI KHUSUS BLOK WARNA FULL KARTU EXPANDER ---
 st.markdown("""
 <style>
-/* Hilangkan ruang kosong atas & samping layar HP */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 1rem !important;
@@ -24,30 +22,65 @@ st.markdown("""
     padding-right: 0.3rem !important;
 }
 
-/* Jarak antar kartu pasien dibuat sangat rapat */
+/* Base Expander */
 div[data-testid="stExpander"] {
     border-radius: 6px !important;
-    margin-bottom: 3px !important;
+    margin-bottom: 4px !important;
     margin-top: 0px !important;
     border: 1px solid #444 !important;
 }
 
-/* Summary Header Expander Dibuat Tipis & Rapat */
+/* WARNA KUNING FULL (HADIR) */
+div[data-testid="stExpander"].card-kuning {
+    background-color: #F4F207 !important;
+    border: 2px solid #C8C600 !important;
+}
+div[data-testid="stExpander"].card-kuning summary,
+div[data-testid="stExpander"].card-kuning p,
+div[data-testid="stExpander"].card-kuning span {
+    color: #000000 !important;
+    font-weight: bold !important;
+}
+
+/* WARNA HIJAU FULL (BERKAS TERKUMPUL) */
+div[data-testid="stExpander"].card-ijo {
+    background-color: #92D050 !important;
+    border: 2px solid #6A9E32 !important;
+}
+div[data-testid="stExpander"].card-ijo summary,
+div[data-testid="stExpander"].card-ijo p,
+div[data-testid="stExpander"].card-ijo span {
+    color: #000000 !important;
+    font-weight: bold !important;
+}
+
+/* WARNA MERAH FULL (TIDAK HADIR) */
+div[data-testid="stExpander"].card-merah {
+    background-color: #FF0000 !important;
+    border: 2px solid #B30000 !important;
+}
+div[data-testid="stExpander"].card-merah summary,
+div[data-testid="stExpander"].card-merah p,
+div[data-testid="stExpander"].card-merah span {
+    color: #FFFFFF !important;
+    font-weight: bold !important;
+}
+
+/* Ringkasan Header Expander */
 div[data-testid="stExpander"] summary {
     padding-top: 6px !important;
     padding-bottom: 6px !important;
     padding-left: 8px !important;
     padding-right: 8px !important;
-    font-size: 0.9rem !important;
+    font-size: 0.95rem !important;
 }
 
-/* Hilangkan divider berlebih */
 hr {
     margin-top: 0.4rem !important;
     margin-bottom: 0.4rem !important;
 }
 
-/* Style Badge Statistik Sejajar (Hemat Tempat) */
+/* Badge Statistik Sejajar */
 .stat-box {
     background-color: #1e1e1e;
     border: 1px solid #333;
@@ -82,6 +115,8 @@ if "kegiatan_list" not in st.session_state:
     st.session_state.kegiatan_list = []
 if "active_kegiatan" not in st.session_state:
     st.session_state.active_kegiatan = None
+if "open_expander" not in st.session_state:
+    st.session_state.open_expander = None
 
 def run_apps_script(fn, *args):
     url = st.session_state.url or DEFAULT_URL
@@ -102,7 +137,7 @@ def run_apps_script(fn, *args):
     try:
         data = response.json()
     except Exception:
-        raise Exception(f"Server mengembalikan respon non-JSON (Status {response.status_code}). Pastikan setelan deployment 'Anyone'.")
+        raise Exception(f"Server mengembalikan respon non-JSON (Status {response.status_code}). Cek akses 'Anyone' di deployment Apps Script.")
     
     if not data.get("ok"):
         raise Exception(data.get("error", "Terjadi kesalahan pada backend Apps Script."))
@@ -292,7 +327,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI (HP COMPACT)
+# 4. DETAIL KEGIATAN & PRESENSI (BLOK WARNA & AUTO COLLAPSE)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -310,14 +345,12 @@ else:
         status_text = " (Ditutup)" if K.get("status") == "DITUTUP" else ""
         st.markdown(f"#### {K['kode']} · {format_tgl(K['tgl'])}{status_text}")
 
-    # Search Bar Ringkas
     q = st.text_input("🔍 Cari Nama, RM, NIK, No TTD", "", label_visibility="collapsed", placeholder="🔍 Cari Nama, RM, NIK, No TTD").strip().upper()
 
     sT = len(rows)
     sH = len([p for p in rows if p.get("hadir")])
     sK = len([p for p in rows if p.get("kumpul")])
 
-    # BARIS STATISTIK SEJAJAR 1 BARIS (HEMAT TEMPAT DEPAN HP)
     st.markdown(f"""
     <div class="stat-box">
         <div class="stat-item">Peserta: <span class="stat-num">{sT}</span></div>
@@ -326,7 +359,6 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # Filter Peserta
     filtered = []
     for p in rows:
         if not q:
@@ -339,13 +371,26 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # LIST KARTU PESERTA SANGAT RAPAT (TANPA CONTAINER SPASI TEBAL)
+    # RENDER KARTU PESERTA BERWARNA FULL + AUTO COLLAPSE SAMPAI KLIK HADIR
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
         
-        with st.expander(f"{p['no']}. {p['nama']} ({p['rm']})"):
+        # Penentuan Kelas CSS Warna
+        if K.get("status") == "DITUTUP" and not hadir:
+            card_class = "card-merah"
+        elif kumpul:
+            card_class = "card-ijo"
+        elif hadir:
+            card_class = "card-kuning"
+        else:
+            card_class = ""
+
+        # Kontrol otomatis buka / tutup expander
+        is_expanded = (st.session_state.open_expander == p['no'])
+
+        with st.expander(f"{p['no']}. {p['nama']} ({p['rm']})", expanded=is_expanded):
             err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
             if err_nik:
                 st.error(err_nik)
@@ -376,16 +421,20 @@ else:
                             elif opt_h == "HAMIL":
                                 haid_final_val = "HAMIL"
 
+                        # KLIK HADIR -> OTOMATIS NUTUP KARTU
                         if st.button("Set Hadir", key=f"btn_h_{p['no']}", type="primary"):
                             res_p = run_apps_script("setHadir", K["id"], p["no"], haid_final_val)
                             p.update(res_p)
+                            st.session_state.open_expander = None # Tutup kartu otomatis
                             st.rerun()
 
                 with col_act2:
                     if hadir and not kumpul:
+                        # KLIK BERKAS -> OTOMATIS NUTUP KARTU
                         if st.button("Berkas Terkumpul", key=f"btn_k_{p['no']}"):
                             res_p = run_apps_script("setKumpul", K["id"], p["no"])
                             p.update(res_p)
+                            st.session_state.open_expander = None # Tutup kartu otomatis
                             st.rerun()
 
                 with col_act3:
@@ -414,6 +463,7 @@ else:
                             res_upd = run_apps_script("simpanPeserta", K["id"], p["no"], data_update)
                             p.update(res_upd)
                             st.session_state[f"edit_mode_{p['no']}"] = False
+                            st.session_state.open_expander = None
                             st.success("Tersimpan!")
                             st.rerun()
                     with c_canc:
@@ -451,7 +501,7 @@ else:
     st.divider()
 
     # ==========================================
-    # EXPORT EXCEL 4 SHEET PERFEK (F4F207 KUNING, BORDER, ALIGNMENT, HAID+1)
+    # EXPORT EXCEL 4 SHEET PERFEK
     # ==========================================
     if rows:
         st.subheader("📥 Export File Excel Final (4 Sheet)")
