@@ -220,7 +220,15 @@
         tempUploadPayload: null
     };
 
+    function setTanggalHariIni() {
+        let d = new Date();
+        let iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        let el = document.getElementById("inputTgl");
+        if (el && !el.value) el.value = iso;
+    }
+
     window.onload = function() {
+        setTanggalHariIni();
         if (appData.pin) {
             document.getElementById("inputPin").value = appData.pin;
             document.getElementById("inputUrl").value = appData.url;
@@ -619,21 +627,17 @@
             if (!match) return;
 
             let cardColorClass = "card-white";
-            let statusIcon = "⚪";
             if (K.status === "DITUTUP" && !p.hadir) {
                 cardColorClass = "card-red";
-                statusIcon = "🔴";
             } else if (p.kumpul) {
                 cardColorClass = "card-green";
-                statusIcon = "🟢";
             } else if (p.hadir) {
                 cardColorClass = "card-yellow";
-                statusIcon = "🟡";
             }
 
             let item = document.createElement("div");
             item.className = `participant-item ${cardColorClass}`;
-            item.innerHTML = `<span>${p.no}. ${statusIcon} ${p.nama}</span> <span>▼</span>`;
+            item.innerHTML = `<span>${p.no}. ${p.nama}</span> <span>▼</span>`;
             item.onclick = () => {
                 let box = item.nextElementSibling;
                 box.classList.toggle("active");
