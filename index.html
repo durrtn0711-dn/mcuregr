@@ -745,7 +745,7 @@
     async function setKumpul(no) {
         let K = appData.activeKegiatan;
         let p = K.rows.find(x => x.no === no);
-        let res = await callBackend("setKumpul", [K.id, String(no)]);
+        let res = await callBackend("setKumpul", [K.id, Number(no)]);
         Object.assign(p, res);
         renderDetailKegiatan();
     }
