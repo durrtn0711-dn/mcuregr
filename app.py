@@ -283,7 +283,7 @@ else:
                             opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"rad_h_{p['no']}")
                             if opt_h == "HAID":
                                 hari_h = st.text_input("Haid hari keberapa? (Opsional, cth: 2)", key=f"txt_h_{p['no']}").strip()
-                                haid_final_val = f"HAID HARI KE-{hari_h}" if hari_h else "HAID"
+                                haid_final_val = f"HAID H-{hari_h}" if hari_h else "HAID"
                             elif opt_h == "HAMIL":
                                 haid_final_val = "HAMIL"
 
