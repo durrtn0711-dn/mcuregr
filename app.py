@@ -12,7 +12,7 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS SPASI NORMAL, RAPI, DAN TIDAK TUMPANG TINDIH ---
+# --- CSS: JARAK ANTAR CARD DIBUAT RAPAT & PAS (TIDAK RENGGANG) ---
 st.markdown("""
 <style>
 /* Padding Layar Normal di Atas */
@@ -32,6 +32,14 @@ div[data-testid="stSelectbox"], div[data-testid="stDateInput"], div[data-testid=
     margin-bottom: 0.8rem !important;
 }
 
+/* Rapatkan Jarak Vertikal Antar Komponen Daftar Peserta */
+div[data-testid="stVerticalBlock"] {
+    gap: 0.15rem !important;
+}
+.element-container {
+    margin-bottom: 0.15rem !important;
+}
+
 /* Badge Statistik Sejajar */
 .stat-box {
     background-color: #1e1e1e;
@@ -41,7 +49,7 @@ div[data-testid="stSelectbox"], div[data-testid="stDateInput"], div[data-testid=
     display: flex;
     justify-content: space-around;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-size: 0.85rem;
     color: #ffffff;
 }
@@ -50,11 +58,11 @@ div[data-testid="stSelectbox"], div[data-testid="stDateInput"], div[data-testid=
     font-size: 1.05rem;
 }
 
-/* Expander Peserta Rapi & Tidak Bertumpuk */
+/* ATUR JARAK ANTAR CARD PESERTA (EXPANDER) AGAR RAPAT & PAS */
 div[data-testid="stExpander"] {
     border: 1px solid #444 !important;
     border-radius: 6px !important;
-    margin-bottom: 6px !important;
+    margin-bottom: 3px !important; /* Jarak antar card dibuat rapat pas */
 }
 div[data-testid="stExpander"] details {
     padding: 0px !important;
@@ -76,7 +84,7 @@ div[data-testid="stRadio"] > div {
     gap: 15px !important;
 }
 
-/* Pastikan Teks di dalam Expander Jaraknya Pas & Tidak Tumpang Tindih */
+/* Line-height Teks Normal & Nyaman */
 div[data-testid="stExpander"] p, div[data-testid="stExpander"] span, div[data-testid="stExpander"] div {
     line-height: 1.4 !important;
 }
