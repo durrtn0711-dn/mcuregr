@@ -10,9 +10,9 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 # Setup Halaman
 st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="centered")
 
-DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDxV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
+DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS PRESISI SUPER RAPAT KHUSUS LAYAR HP ---
+# --- CSS PRESISI SUPER RAPAT UNTUK LAYAR HP ---
 st.markdown("""
 <style>
 /* Reset Padding Layar HP */
@@ -23,7 +23,7 @@ st.markdown("""
     padding-right: 0.2rem !important;
 }
 
-/* Hilangkan Jarak Kosong Antar Komponen */
+/* Hilangkan Jarak Berlebih Antar Komponen */
 div[data-testid="stVerticalBlock"] > div {
     gap: 0.15rem !important;
     margin-bottom: 0px !important;
@@ -47,26 +47,17 @@ div[data-testid="stVerticalBlock"] > div {
     font-size: 1.1rem;
 }
 
-/* STYLING POPOVER (NAMA PESERTA ADALAH TOMBOL UTAMA) */
-div[data-testid="stPopover"] {
-    width: 100% !important;
-    margin-bottom: 2px !important;
-}
-div[data-testid="stPopover"] > button {
-    width: 100% !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    padding: 10px 12px !important;
+/* Styling Expander Agar Rapat di HP */
+div[data-testid="stExpander"] {
+    border: 1px solid #444 !important;
     border-radius: 6px !important;
-    font-weight: bold !important;
-    font-size: 0.9rem !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    margin-bottom: 3px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# --- INITIALIZATION STATE ---
-if "url" not in st.session_state:
+# --- INITIALIZATION STATE PERMANEN ---
+if "url" not in st.session_state or not st.session_state.url:
     st.session_state.url = DEFAULT_URL
 if "pin" not in st.session_state:
     st.session_state.pin = ""
@@ -80,8 +71,9 @@ if "active_kegiatan" not in st.session_state:
     st.session_state.active_kegiatan = None
 
 def run_apps_script(fn, *args):
-    url = st.session_state.url or DEFAULT_URL
-    pin = st.session_state.pin
+    url = st.session_state.get("url") or DEFAULT_URL
+    pin = st.session_state.get("pin", "")
+    
     if not url or not pin:
         raise Exception("Alamat URL Server atau PIN belum diisi.")
     
@@ -90,7 +82,7 @@ def run_apps_script(fn, *args):
     try:
         response = requests.post(url, json=payload, timeout=30, allow_redirects=True)
     except Exception as e:
-        raise Exception(f"Gagal terhubung ke server: {e}")
+        raise Exception(f"Gagal terhubung ke server ({url}): {e}")
     
     if response.status_code == 404:
         raise Exception("URL Apps Script 404. Cek kembali URL /exec kamu.")
@@ -157,7 +149,7 @@ if not st.session_state.logged_in:
     st.title("🏥 MCU Registrasi")
     with st.form("login_form"):
         st.subheader("Masuk Aplikasi")
-        input_url = st.text_input("Alamat Server (URL Web App)", value=DEFAULT_URL)
+        input_url = st.text_input("Alamat Server (URL Web App)", value=st.session_state.get("url", DEFAULT_URL))
         input_pin = st.text_input("PIN", type="password")
         btn_login = st.form_submit_button("Masuk")
 
@@ -288,7 +280,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI (ST.POPOVER NATIVE STREAMLIT)
+# 4. DETAIL KEGIATAN & PRESENSI (EXPANDER BAWAH TANPA TULISAN STATUS)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -332,29 +324,27 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # RENDER BARIS NAMA PESERTA DENGAN ST.POPOVER (NAMA PESERTA ADALAH TOMBOL)
+    # RENDER BARIS NAMA PESERTA MENGGUNAKAN EXPANDER BAWAH
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
         no_p = p['no']
         
-        # Penanda Status Visual pada Label Nama
+        # Penanda Titik Warna Tanpa Tulisan Status
         if K.get("status") == "DITUTUP" and not hadir:
-            icon_status = "🔴 (TIDAK HADIR)"
+            icon_status = "🔴"
         elif kumpul:
-            icon_status = "🟢 (BERKAS TERKUMPUL)"
+            icon_status = "🟢"
         elif hadir:
-            icon_status = "🟡 (HADIR)"
+            icon_status = "🟡"
         else:
             icon_status = "⚪"
 
-        # Label Murni: Nomor + Icon Status + Nama Lengkap (No RM Dibuang)
-        btn_label = f"{no_p}. {icon_status} {p['nama']}"
+        # Label Bersih: [No]. [Ikon Titik] [Nama Lengkap] (Tanpa No RM, Tanpa Tulisan Status)
+        exp_label = f"{no_p}. {icon_status} {p['nama']}"
 
-        # KLIK NAMA PESERTA -> LANGSUNG MEMBUKA MENU POPOVER MELAYANG
-        with st.popover(btn_label, use_container_width=True):
-            st.markdown(f"### {no_p}. {p['nama']}")
+        with st.expander(exp_label):
             st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
             st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
             
@@ -376,31 +366,29 @@ else:
                     jk_val = str(p.get("jk", "")).upper()
                     
                     if jk_val in ["P", "PEREMPUAN"]:
-                        opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"pop_rad_{no_p}")
+                        opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"exp_rad_{no_p}")
                         if opt_h == "HAID":
-                            hari_h = st.selectbox("Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"pop_sel_{no_p}")
+                            hari_h = st.selectbox("Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"exp_sel_{no_p}")
                             if hari_h == "Lainnya":
-                                custom_h = st.text_input("Hari keberapa?", key=f"pop_txt_{no_p}").strip()
+                                custom_h = st.text_input("Hari keberapa?", key=f"exp_txt_{no_p}").strip()
                                 haid_final_val = f"HAID+{custom_h}" if custom_h else "HAID"
                             else:
                                 haid_final_val = f"HAID+{hari_h}"
                         elif opt_h == "HAMIL":
                             haid_final_val = "HAMIL"
 
-                    if st.button("✅ Set Hadir", key=f"pop_btn_h_{no_p}", type="primary", use_container_width=True):
-                        res_p = run_apps_script("setHadir", K["id"], no_p, haid_final_val)
-                        p.update(res_p)
+                    if st.button("✅ Set Hadir", key=f"exp_btn_h_{no_p}", type="primary", use_container_width=True):
+                        run_apps_script("setHadir", K["id"], no_p, haid_final_val)
                         st.rerun()
 
                 elif hadir and not kumpul:
-                    if st.button("📁 Berkas Terkumpul", key=f"pop_btn_k_{no_p}", type="primary", use_container_width=True):
-                        res_p = run_apps_script("setKumpul", K["id"], no_p)
-                        p.update(res_p)
+                    if st.button("📁 Berkas Terkumpul", key=f"exp_btn_k_{no_p}", type="primary", use_container_width=True):
+                        run_apps_script("setKumpul", K["id"], no_p)
                         st.rerun()
 
             # FORM EDIT
             with st.expander("✏️ Edit Data Peserta"):
-                with st.form(key=f"form_pop_edit_{no_p}"):
+                with st.form(key=f"form_exp_edit_{no_p}"):
                     e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
                     e_rm = st.text_input("No RM", value=p.get("rm", ""))
                     e_nik = st.text_input("NIK", value=str(p.get("nik", "")))
@@ -415,8 +403,7 @@ else:
                             "tgl": e_tgl,
                             "jk": e_jk
                         }
-                        res_upd = run_apps_script("simpanPeserta", K["id"], no_p, data_update)
-                        p.update(res_upd)
+                        run_apps_script("simpanPeserta", K["id"], no_p, data_update)
                         st.success("Tersimpan!")
                         st.rerun()
 
