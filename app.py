@@ -12,7 +12,7 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS: JARAK ANTAR CARD DIBUAT RAPAT & PAS (TIDAK RENGGANG) ---
+# --- CSS: JARAK ANTAR CARD PAS, RAPI, DAN TIDAK TUMPANG TINDIH ---
 st.markdown("""
 <style>
 /* Padding Layar Normal di Atas */
@@ -32,12 +32,12 @@ div[data-testid="stSelectbox"], div[data-testid="stDateInput"], div[data-testid=
     margin-bottom: 0.8rem !important;
 }
 
-/* Rapatkan Jarak Vertikal Antar Komponen Daftar Peserta */
+/* Jarak Antar Komponen / Card di Beranda */
 div[data-testid="stVerticalBlock"] {
-    gap: 0.15rem !important;
+    gap: 0.3rem !important;
 }
 .element-container {
-    margin-bottom: 0.15rem !important;
+    margin-bottom: 0.3rem !important;
 }
 
 /* Badge Statistik Sejajar */
@@ -49,7 +49,7 @@ div[data-testid="stVerticalBlock"] {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     font-size: 0.85rem;
     color: #ffffff;
 }
@@ -58,11 +58,11 @@ div[data-testid="stVerticalBlock"] {
     font-size: 1.05rem;
 }
 
-/* ATUR JARAK ANTAR CARD PESERTA (EXPANDER) AGAR RAPAT & PAS */
+/* ATUR JARAK ANTAR CARD PESERTA (EXPANDER) AGAR PAS & NYAMAN */
 div[data-testid="stExpander"] {
     border: 1px solid #444 !important;
     border-radius: 6px !important;
-    margin-bottom: 3px !important; /* Jarak antar card dibuat rapat pas */
+    margin-bottom: 8px !important; /* Jarak antar card pas, tidak renggang banget dan tidak dempet */
 }
 div[data-testid="stExpander"] details {
     padding: 0px !important;
@@ -74,7 +74,7 @@ div[data-testid="stExpander"] summary {
 }
 div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
     padding: 8px 10px 10px 10px !important;
-    gap: 0.4rem !important;
+    gap: 0.5rem !important;
 }
 
 /* Radio Button Horizontal Rapi */
@@ -91,8 +91,8 @@ div[data-testid="stExpander"] p, div[data-testid="stExpander"] span, div[data-te
 </style>
 """, unsafe_allow_html=True)
 
-# --- INITIALIZATION STATE PERMANEN ---
-if "url" not in st.session_state or not st.session_state.url:
+# --- INITIALIZATION STATE PERMANEN (AUTO-LOGIN SUPPORT) ---
+if "url" not in st.session_state:
     st.session_state.url = DEFAULT_URL
 if "pin" not in st.session_state:
     st.session_state.pin = ""
@@ -136,6 +136,14 @@ def load_home_data():
     home_data = run_apps_script("getHome")
     st.session_state.daftar_pt = [p["kode"] for p in home_data.get("pt", [])]
     st.session_state.kegiatan_list = home_data.get("keg", [])
+
+# FITUR AUTO-LOGIN: Jika PIN sudah terekam di session, langsung tarik data home otomatis saat pertama kali dibuka / refresh
+if not st.session_state.logged_in and st.session_state.pin:
+    try:
+        load_home_data()
+        st.session_state.logged_in = True
+    except Exception:
+        st.session_state.logged_in = False
 
 def format_tgl(tgl_str):
     if not tgl_str or tgl_str == "-":
@@ -315,7 +323,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI
+# 4. DETAIL KEGIATAN & PRESENSI (LIVE SEARCH OTOMATIS)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -333,6 +341,7 @@ else:
         status_text = " (Ditutup)" if K.get("status") == "DITUTUP" else ""
         st.markdown(f"#### {K['kode']} · {format_tgl(K['tgl'])}{status_text}")
 
+    # LIVE SEARCH: Menggunakan st.text_input biasa tanpa form, langsung memfilter real-time saat diketik
     q = st.text_input("🔍 Cari Nama, RM, NIK, No TTD", "", label_visibility="collapsed", placeholder="🔍 Cari Nama, RM, NIK, No TTD").strip().upper()
 
     sT = len(rows)
