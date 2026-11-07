@@ -10,14 +10,13 @@
             --card-bg: #1e1e1e;
             --border-color: #333;
             --text-color: #ffffff;
-            --text-secondary: #aaa;
             --primary-color: #ff4b4b;
             --green: #92D050;
             --yellow: #F4F207;
             --red: #FF0000;
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
@@ -25,10 +24,7 @@
             display: flex;
             justify-content: center;
         }
-        .container {
-            width: 100%;
-            max-width: 480px;
-        }
+        .container { width: 100%; max-width: 480px; }
         h2, h3 { margin: 8px 0; }
         .card {
             background-color: var(--card-bg);
@@ -48,39 +44,17 @@
             box-sizing: border-box;
             font-size: 0.95rem;
         }
-        button {
-            background-color: var(--primary-color);
-            font-weight: bold;
-            cursor: pointer;
-            border: none;
-        }
-        button.secondary {
-            background-color: #444;
-        }
+        button { background-color: var(--primary-color); font-weight: bold; cursor: pointer; border: none; }
+        button.secondary { background-color: #444; }
         .stat-box {
-            display: flex;
-            justify-content: space-around;
-            background: #1a1a1a;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 8px;
-            margin-bottom: 10px;
-            font-size: 0.85rem;
+            display: flex; justify-content: space-around;
+            background: #1a1a1a; border: 1px solid var(--border-color);
+            border-radius: 6px; padding: 8px; margin-bottom: 10px; font-size: 0.85rem;
         }
-        
-        /* FULL BLOK WARNA BACKGROUND CARD PESERTA */
         .participant-item {
-            border: 1px solid #444;
-            border-radius: 6px;
-            margin-bottom: 6px;
-            padding: 10px 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-weight: bold;
-            font-size: 0.9rem;
-            color: #000 !important; /* Teks hitam agar kontras dengan warna cerah */
+            border: 1px solid #444; border-radius: 6px; margin-bottom: 6px;
+            padding: 10px 12px; cursor: pointer; display: flex; align-items: center;
+            justify-content: space-between; font-weight: bold; font-size: 0.9rem;
         }
         .card-red { background-color: var(--red) !important; color: #fff !important; }
         .card-yellow { background-color: var(--yellow) !important; color: #000 !important; }
@@ -88,38 +62,26 @@
         .card-white { background-color: #e0e0e0 !important; color: #000 !important; }
 
         .details-box {
-            display: none;
-            background: #1a1a1a;
-            color: #fff;
-            padding: 10px;
-            border-radius: 6px;
-            margin-top: -3px;
-            margin-bottom: 8px;
-            font-size: 0.85rem;
-            border: 1px solid var(--border-color);
-            border-left: 3px solid var(--primary-color);
+            display: none; background: #1a1a1a; color: #fff; padding: 10px;
+            border-radius: 6px; margin-top: -3px; margin-bottom: 8px; font-size: 0.85rem;
+            border: 1px solid var(--border-color); border-left: 3px solid var(--primary-color);
         }
-        .details-box.active {
-            display: block;
-        }
-        .radio-group {
-            display: flex;
-            gap: 15px;
-            margin: 8px 0;
-            font-size: 0.85rem;
-            color: #fff;
-        }
+        .details-box.active { display: block; }
+        .radio-group { display: flex; gap: 15px; margin: 8px 0; font-size: 0.85rem; color: #fff; }
         .hidden { display: none !important; }
         .loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center;
-            color: white; font-size: 1.2rem; z-index: 999;
+            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white; font-size: 1.1rem; z-index: 999;
         }
     </style>
 </head>
 <body>
 
-<div id="loading" class="loading-overlay hidden">Memproses Server...</div>
+<div id="loading" class="loading-overlay hidden">
+    <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
+    <div id="loadingText">Memproses Server...</div>
+</div>
 
 <div class="container">
     <!-- HALAMAN LOGIN -->
@@ -147,13 +109,26 @@
             <input type="date" id="inputTgl">
             <label>Upload File Mentah Excel (.xlsx)</label>
             <input type="file" id="inputExcel" accept=".xlsx, .xls">
-            <button onclick="previewExcel()">Periksa File Excel</button>
+            <button onclick="previewExcel()">Periksa File Excel (Kilat)</button>
         </div>
 
-        <!-- PREVIEW UPLOAD SECTION -->
-        <div id="previewSection" class="card hidden">
-            <div id="previewInfo"></div>
-            <div id="previewCekList" style="margin: 8px 0; font-size:0.85rem;"></div>
+        <!-- PREVIEW & TOMBOL INTERAKTIF KONFIRMASI DUPLIKAT -->
+        <div id="previewSection" class="card hidden" style="border: 2px solid var(--yellow);">
+            <h4 style="color:var(--yellow); margin-top:0;">📊 Hasil Pemeriksaan File</h4>
+            <div id="previewInfo" style="margin-bottom: 8px;"></div>
+            
+            <div id="conflictContainer" class="hidden" style="background:#251a00; padding:10px; border-radius:6px; margin-bottom:10px;">
+                <p style="margin:0 0 5px 0; font-weight:bold; color:var(--yellow);">⚠️ Ditemukan Data Peserta Ganda (Double):</p>
+                <div id="conflictList" style="font-size:0.8rem; max-height:120px; overflow-y:auto; margin-bottom:8px;"></div>
+                
+                <label style="font-size:0.85rem;">Pilih Tindakan untuk Data Double:</label>
+                <select id="conflictAction">
+                    <option value="skip">Lewati Data Double (Gunakan yang pertama)</option>
+                    <option value="overwrite">Timpa dengan Data Terbaru (Gunakan yang terakhir)</option>
+                    <option value="force_add">Tetap Tambahkan Semua (Biarkan Double)</option>
+                </select>
+            </div>
+
             <div style="display: flex; gap: 10px;">
                 <button id="btnSimpanUpload" onclick="saveUpload()">Simpan Peserta</button>
                 <button class="secondary" onclick="cancelUpload()">Batal</button>
@@ -229,7 +204,7 @@
     </div>
 </div>
 
-<!-- SheetJS untuk membaca file Excel langsung di browser -->
+<!-- SheetJS untuk membaca file Excel secepat kilat di browser -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
     let appData = {
@@ -248,12 +223,14 @@
         }
     };
 
-    function showLoading(show) {
-        document.getElementById("loading").classList.toggle("hidden", !show);
+    function showLoading(show, text = "Memproses Server...") {
+        let el = document.getElementById("loading");
+        document.getElementById("loadingText").textContent = text;
+        el.classList.toggle("hidden", !show);
     }
 
     async function callBackend(fn, args = []) {
-        showLoading(true);
+        showLoading(true, "Menghubungkan ke Server...");
         try {
             let res = await fetch(appData.url, {
                 method: "POST",
@@ -343,6 +320,7 @@
         handleLogin(true);
     }
 
+    // UPLOAD EXCEL SUPER KILAT & CEK DUPLIKAT INTERAKTIF
     async function previewExcel() {
         let pt = document.getElementById("selectPt").value;
         let tgl = document.getElementById("inputTgl").value;
@@ -352,8 +330,10 @@
             return;
         }
 
+        showLoading(true, "Membaca file Excel secepat kilat...");
         let file = fileInput.files[0];
         let reader = new FileReader();
+        
         reader.onload = async function(e) {
             try {
                 let data = new Uint8Array(e.target.result);
@@ -370,20 +350,28 @@
                     }
                 });
 
+                // Kirim ke backend untuk di-preview
                 let res = await callBackend("previewUpload", [pt, tgl, payloadSheets]);
                 appData.tempUploadPayload = { kode: pt, tgl: tgl, payload: payloadSheets };
 
-                let infoDiv = document.getElementById("previewInfo");
-                infoDiv.innerHTML = `<b>${res.total} Peserta</b> | ${res.baru} baru, ${res.lewat} dilewati, ${res.cek.length} perlu dicek`;
+                document.getElementById("previewInfo").innerHTML = `<b>Total Ditemukan: ${res.total} Peserta</b> | Baru: ${res.baru}, Dilewati: ${res.lewat}`;
                 
-                let cekDiv = document.getElementById("previewCekList");
-                cekDiv.innerHTML = "";
-                res.cek.forEach(c => {
-                    cekDiv.innerHTML += `• No ${c.no}. <b>${c.nama}</b>: ${c.masalah}<br>`;
-                });
+                let conflictBox = document.getElementById("conflictContainer");
+                let conflictList = document.getElementById("conflictList");
+                conflictList.innerHTML = "";
+
+                if (res.cek && res.cek.length > 0) {
+                    conflictBox.classList.remove("hidden");
+                    res.cek.forEach(c => {
+                        conflictList.innerHTML += `• No ${c.no}. <b>${c.nama}</b>: ${c.masalah}<br>`;
+                    });
+                } else {
+                    conflictBox.classList.add("hidden");
+                }
 
                 document.getElementById("previewSection").classList.remove("hidden");
             } catch (err) {
+                showLoading(false);
                 alert("Gagal membaca file Excel: " + err.message);
             }
         };
@@ -393,8 +381,12 @@
     async function saveUpload() {
         if (!appData.tempUploadPayload) return;
         let up = appData.tempUploadPayload;
-        let s = await callBackend("simpanUpload", [up.kode, up.tgl, up.payload]);
+        let action = document.getElementById("conflictAction").value;
+        
+        // Kirim opsi tindakan duplikat ke backend
+        let s = await callBackend("simpanUpload", [up.kode, up.tgl, up.payload, action]);
         appData.activeKegiatan = await callBackend("getKegiatan", [s.keg]);
+        
         document.getElementById("previewSection").classList.add("hidden");
         document.getElementById("homeSection").classList.add("hidden");
         document.getElementById("detailSection").classList.remove("hidden");
@@ -470,7 +462,6 @@
             let match = !q || p.no.toString() === q || p.nama.toUpperCase().includes(q) || p.rm.toUpperCase().includes(q) || (p.nik && p.nik.toString().includes(q));
             if (!match) return;
 
-            // Tentukan warna blok background card penuh
             let cardColorClass = "card-white";
             let statusIcon = "⚪";
             if (K.status === "DITUTUP" && !p.hadir) {
