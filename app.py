@@ -63,6 +63,41 @@ def format_tgl(tgl_str):
         return f"{parts[2]}-{parts[1]}-{parts[0]}"
     return str(tgl_str)
 
+# FUNGSI ANALISIS PINTAR: CEK KECOCOKAN NIK DENGAN TANGGAL LAHIR
+def analisa_nik_vs_tgl(nik, tgl_str, jk):
+    if not nik or len(str(nik).strip()) < 12 or not tgl_str or tgl_str == "-":
+        return None
+    nik_str = str(nik).strip().replace(".0", "")
+    if len(nik_str) < 12:
+        return None
+    
+    try:
+        # Ambil 6 digit tanggal lahir di NIK (Posisi digit ke 7 - 12)
+        dd_nik = int(nik_str[6:8])
+        mm_nik = int(nik_str[8:10])
+        yy_nik = int(nik_str[10:12])
+
+        parts = str(tgl_str).split("-")
+        if len(parts) != 3:
+            return None
+        
+        yy_real = int(parts[0]) % 100
+        mm_real = int(parts[1])
+        dd_real = int(parts[2])
+
+        # Kalau Perempuan, NIK ditambah 40 pada tanggal lahir
+        jk_upper = str(jk).strip().upper()
+        if jk_upper in ["P", "PEREMPUAN"]:
+            dd_real_nik = dd_real + 40
+        else:
+            dd_real_nik = dd_real
+
+        if (dd_nik != dd_real_nik) or (mm_nik != mm_real) or (yy_nik != yy_real):
+            return f"⚠️ NIK ({nik_str[6:12]}) vs Tgl Lahir ({tgl_str}) TIDAK COCOK!"
+    except Exception:
+        return None
+    return None
+
 # ==========================================
 # 1. HALAMAN LOGIN
 # ==========================================
@@ -250,30 +285,41 @@ else:
 
     st.divider()
 
-    # List Peserta Card
+    # LIST CARDS PESERTA DENGAN BLOK WARNA LANGSUNG DI APK
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
         
-        badge = ""
+        # Penanda Warna Tampilan APK
         if K.get("status") == "DITUTUP" and not hadir:
-            badge = "🔴 Tidak hadir"
+            card_badge = "🔴 TIDAK HADIR"
+            color_prefix = "🔴 "
         elif kumpul:
-            badge = "🟢 Berkas ✓"
+            card_badge = "🟢 BERKAS TERKUMPUL"
+            color_prefix = "🟢 "
         elif hadir:
-            badge = "🟡 Hadir"
+            card_badge = "🟡 HADIR"
+            color_prefix = "🟡 "
+        else:
+            card_badge = "⚪ BELUM HADIR"
+            color_prefix = "⚪ "
 
-        with st.expander(f"{p['no']}. {p['nama']} ({p['rm']}) {badge}"):
+        with st.expander(f"{color_prefix}{p['no']}. {p['nama']} ({p['rm']}) — {card_badge}"):
+            # Analisis Otomatis NIK vs Tgl Lahir
+            err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
+            if err_nik:
+                st.error(f"🚨 **ANALISIS APLIKASI:** {err_nik}")
+
             st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
             st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
             if p.get("haid"):
-                st.info(f"Keterangan Tambahan: **{p['haid']}**")
+                st.warning(f"Keterangan Tambahan: **{p['haid']}**")
             if p.get("cek"):
-                st.warning(f"Perlu dicek dengan KTP: {p['cek']}")
+                st.error(f"Perlu dicek dengan KTP: {p['cek']}")
 
             if is_draft:
-                col_act1, col_act2 = st.columns(2)
+                col_act1, col_act2, col_act3 = st.columns([2, 2, 1])
                 with col_act1:
                     if not hadir:
                         haid_final_val = ""
@@ -282,27 +328,95 @@ else:
                         if jk_val in ["P", "PEREMPUAN"]:
                             opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"rad_h_{p['no']}")
                             if opt_h == "HAID":
-                                hari_h = st.text_input("Haid hari keberapa? (Opsional, cth: 2)", key=f"txt_h_{p['no']}").strip()
-                                haid_final_val = f"HAID H-{hari_h}" if hari_h else "HAID"
+                                hari_h = st.selectbox("Haid Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"sel_h_{p['no']}")
+                                if hari_h == "Lainnya":
+                                    custom_h = st.text_input("Hari keberapa?", key=f"txt_h_{p['no']}").strip()
+                                    haid_final_val = f"HAID+{custom_h}" if custom_h else "HAID"
+                                else:
+                                    haid_final_val = f"HAID+{hari_h}"
                             elif opt_h == "HAMIL":
                                 haid_final_val = "HAMIL"
 
-                        if st.button("Set Hadir", key=f"btn_h_{p['no']}", type="primary"):
+                        if st.button("Set Hadir (Kuning)", key=f"btn_h_{p['no']}", type="primary"):
                             res_p = run_apps_script("setHadir", K["id"], p["no"], haid_final_val)
                             p.update(res_p)
                             st.rerun()
 
                 with col_act2:
                     if hadir and not kumpul:
-                        if st.button("Sudah mengumpulkan", key=f"btn_k_{p['no']}"):
+                        if st.button("Sudah Mengumpulkan (Ijo)", key=f"btn_k_{p['no']}"):
                             res_p = run_apps_script("setKumpul", K["id"], p["no"])
                             p.update(res_p)
                             st.rerun()
 
+                with col_act3:
+                    # OPSI EDIT PESERTA
+                    if st.button("✏️ Edit", key=f"btn_edit_{p['no']}"):
+                        st.session_state[f"edit_mode_{p['no']}"] = True
+
+            # FORM EDIT PESERTA (JIKA TOMBOL EDIT DIKLIK)
+            if st.session_state.get(f"edit_mode_{p['no']}", False):
+                with st.form(key=f"form_edit_{p['no']}"):
+                    st.subheader(f"Edit Data Peserta No. {p['no']}")
+                    e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
+                    e_rm = st.text_input("No RM", value=p.get("rm", ""))
+                    e_nik = st.text_input("NIK", value=str(p.get("nik", "")))
+                    e_tgl = st.text_input("Tgl Lahir (YYYY-MM-DD)", value=str(p.get("tgl", "")))
+                    e_jk = st.selectbox("Jenis Kelamin", ["L", "P"], index=0 if str(p.get("jk","")).upper().startswith("L") else 1)
+                    
+                    c_save, c_canc = st.columns(2)
+                    with c_save:
+                        if st.form_submit_button("💾 Simpan Perubahan"):
+                            data_update = {
+                                "nama": e_nama,
+                                "rm": e_rm,
+                                "nik": e_nik,
+                                "tgl": e_tgl,
+                                "jk": e_jk
+                            }
+                            res_upd = run_apps_script("simpanPeserta", K["id"], p["no"], data_update)
+                            p.update(res_upd)
+                            st.session_state[f"edit_mode_{p['no']}"] = False
+                            st.success("Data berhasil diubah!")
+                            st.rerun()
+                    with c_canc:
+                        if st.form_submit_button("Batal"):
+                            st.session_state[f"edit_mode_{p['no']}"] = False
+                            st.rerun()
+
+    st.divider()
+
+    # OPSI TAMBAH DATA MANUAL PESERTA
+    if K.get("status") == "DRAFT":
+        with st.expander("➕ Tambah Peserta Manual (Baru)"):
+            with st.form("form_tambah_manual"):
+                m_nama = st.text_input("Nama Lengkap")
+                m_rm = st.text_input("No RM (Contoh: RM-001)")
+                m_nik = st.text_input("NIK (16 Digit)")
+                m_tgl = st.date_input("Tanggal Lahir", datetime(2000, 1, 1))
+                m_jk = st.selectbox("Jenis Kelamin", ["L", "P"])
+                
+                if st.form_submit_button("➕ Simpan Peserta Baru", type="primary"):
+                    if m_nama and m_rm:
+                        new_data = {
+                            "nama": m_nama,
+                            "rm": m_rm,
+                            "nik": m_nik,
+                            "tgl": m_tgl.strftime("%Y-%m-%d"),
+                            "jk": m_jk,
+                            "status": "BELUM"
+                        }
+                        res_new = run_apps_script("tambahPeserta", K["id"], new_data)
+                        rows.append(res_new)
+                        st.success(f"Peserta {m_nama} berhasil ditambahkan!")
+                        st.rerun()
+                    else:
+                        st.error("Nama dan No RM wajib diisi!")
+
     st.divider()
 
     # ==========================================
-    # EXPORT EXCEL 4 SHEET PERFEK (F4F207 KUNING, BORDER, ALIGNMENT, HAID/HAMIL CHAMPION)
+    # EXPORT EXCEL 4 SHEET PRESISI DENGAN BLOK WARNA (F4F207, IJO, MERAH & BORDER)
     # ==========================================
     if rows:
         st.subheader("📥 Export File Excel Final (4 Sheet Berwarna)")
@@ -378,13 +492,12 @@ else:
                     cell.fill = row_fill
                     cell.border = TABLE_BORDER
                     
-                    # Kolom NAMA Rata Kiri, Lainnya Rata Tengah
                     if key == "nama":
                         cell.alignment = ALIGN_LEFT
                     else:
                         cell.alignment = ALIGN_CENTER
 
-                # Kolom TTD (Samping Kanan Kolom NIK/HP)
+                # Kolom TTD (Samping Kanan NIK/HP)
                 col_ttd_idx = len(cols_map) + 1
                 cell_ttd = ws.cell(row=r_idx, column=col_ttd_idx, value=p.get("no", ""))
                 cell_ttd.fill = row_fill
@@ -398,14 +511,14 @@ else:
                 cell_haid.border = TABLE_BORDER
                 cell_haid.alignment = ALIGN_CENTER
 
-        # 2. SHEET PENDAFTARAN (Semua Peserta + Hijau/Kuning/Merah)
+        # 2. SHEET PENDAFTARAN
         build_styled_sheet("PENDAFTARAN", rows, is_pendaftaran=True)
 
-        # 3. SHEET HADIR (Hanya Peserta Hadir + Hijau Semua)
+        # 3. SHEET HADIR
         peserta_hadir = [p for p in rows if p.get("hadir")]
         build_styled_sheet("HADIR", peserta_hadir)
 
-        # 4. SHEET TIDAK HADIR (Hanya Peserta Tidak Hadir + Merah Semua)
+        # 4. SHEET TIDAK HADIR
         peserta_tidak = [p for p in rows if not p.get("hadir")]
         build_styled_sheet("TIDAK HADIR", peserta_tidak)
 
