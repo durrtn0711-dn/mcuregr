@@ -4,8 +4,9 @@ import pandas as pd
 import io
 import re
 from datetime import datetime
+import openpyxl
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
-# Setup Halaman
 st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="centered")
 
 # --- INITIALIZATION STATE ---
@@ -22,7 +23,6 @@ if "kegiatan_list" not in st.session_state:
 if "active_kegiatan" not in st.session_state:
     st.session_state.active_kegiatan = None
 
-# --- API CALL TO APPS SCRIPT ---
 def run_apps_script(fn, *args):
     url = st.session_state.url
     pin = st.session_state.pin
@@ -42,7 +42,7 @@ def run_apps_script(fn, *args):
     try:
         data = response.json()
     except Exception:
-        raise Exception(f"Server mengembalikan respon non-JSON (Status {response.status_code}). Pastikan setelan deployment 'Anyone'.")
+        raise Exception(f"Server mengembalikan respon non-JSON (Status {response.status_code}). Cek akses 'Anyone' di deployment Apps Script.")
     
     if not data.get("ok"):
         raise Exception(data.get("error", "Terjadi kesalahan pada backend Apps Script."))
@@ -94,7 +94,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ==========================================
-# 2. HEADER & LOGOUT
+# 2. HEADER
 # ==========================================
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
@@ -114,7 +114,7 @@ if st.session_state.active_kegiatan is None:
     st.caption("Pilih perusahaan, tanggal kegiatan, lalu upload file mentah Excel.")
 
     if not st.session_state.daftar_pt:
-        st.error("Daftar perusahaan kosong. Cek sheet PENGATURAN di Apps Script.")
+        st.error("Daftar perusahaan kosong. Pastikan sheet PENGATURAN di Apps Script diisi.")
     else:
         pt_pilihan = st.selectbox("Pilih Perusahaan / PT", st.session_state.daftar_pt)
         tgl_kegiatan = st.date_input("Tanggal Kegiatan", datetime.now())
@@ -144,12 +144,12 @@ if st.session_state.active_kegiatan is None:
                         "kode": pt_pilihan,
                         "tgl": tgl_str,
                         "payload": payload_sheets,
-                        "res": res
+                        "res": res,
+                        "raw_bytes": uploaded_file.getvalue()
                     }
                 except Exception as e:
                     st.error(f"Gagal membaca file: {e}")
 
-    # Preview Upload & Deteksi Duplikat
     if "temp_upload" in st.session_state and st.session_state.temp_upload:
         up = st.session_state.temp_upload
         r = up["res"]
@@ -249,7 +249,7 @@ else:
 
     st.divider()
 
-    # List Peserta Card
+    # List Cards Peserta
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
@@ -278,7 +278,6 @@ else:
                         haid_final_val = ""
                         jk_val = str(p.get("jk", "")).upper()
                         
-                        # Opsi Spesial Perempuan (Haid / Hamil & Hari Keberapa)
                         if jk_val in ["P", "PEREMPUAN"]:
                             opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"rad_h_{p['no']}")
                             if opt_h == "HAID":
@@ -302,53 +301,103 @@ else:
     st.divider()
 
     # ==========================================
-    # MODUL EXPORT EXCEL BERBASIS SHEET BLOCK (PWJ & SMJ PRECISE FORMAT)
+    # EXPORT EXCEL 4 SHEET PRESISI DENGAN BLOK WARNA (KUNING, IJO, MERAH)
     # ==========================================
     if rows:
-        st.subheader("📥 Export File Excel Final (Multi-Sheet Block)")
+        st.subheader("📥 Export File Excel Final (4 Sheet Berwarna)")
         
-        peserta_hadir = [p for p in rows if p.get("hadir")]
-        peserta_tidak_hadir = [p for p in rows if not p.get("hadir")]
-
         kode_pt = str(K.get("kode", "")).upper()
+        tgl_indo_str = format_tgl(K.get("tgl"))
+        
+        # DEFINISI WARNA STANDAR EXCEL SAMPLE
+        FILL_GREEN = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")  # Hadir/Ijo
+        FILL_YELLOW = PatternFill(start_color="FFF0A6", end_color="FFF0A6", fill_type="solid") # Hadir/Kuning
+        FILL_RED = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")   # Tidak Hadir/Merah
+        FILL_HEADER = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")# Header Abu
 
-        # SETUP HEADER KHUSUS BERDASARKAN PT (SMJ vs PWJ)
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active) # Hapus sheet default
+
+        # HEADER BERDASARKAN PT
         if "SMJ" in kode_pt:
-            cols_export = ['no', 'rm', 'nama', 'jk', 'tgl', 'usia', 'nik', 'hp', 'jenis']
-            header_excel = ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR (BLN-TGL-THN)', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD']
+            judul_pt = "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY"
+            headers = ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR (BLN-TGL-THN)', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD']
+            cols_map = ['no', 'rm', 'nama', 'jk', 'tgl', 'usia', 'nik', 'hp', 'jenis']
         else:
-            # Standar PWJ / PT Lainnya
-            cols_export = ['no', 'rm', 'nama', 'urut', 'bagian', 'jabatan', 'tempat', 'tgl', 'usia', 'jk', 'hp', 'nik']
-            header_excel = ['NO', 'NO RM', 'NAMA', 'NO. URUT MCU', 'BAGIAN', 'JABATAN', 'TEMPAT LAHIR', 'TANGGAL LAHIR', 'USIA', 'JENIS KELAMIN', 'NO HP', 'NO. KTP', 'TTD', 'HAID/HAMIL']
+            judul_pt = "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA"
+            headers = ['NO', 'NO RM', 'NAMA', 'NO. URUT MCU', 'BAGIAN', 'JABATAN', 'TEMPAT LAHIR', 'TANGGAL LAHIR', 'USIA', 'JENIS KELAMIN', 'NO HP', 'NO. KTP', 'TTD', 'HAID/HAMIL']
+            cols_map = ['no', 'rm', 'nama', 'urut', 'bagian', 'jabatan', 'tempat', 'tgl', 'usia', 'jk', 'hp', 'nik']
 
-        def build_df_block(data_list):
-            if not data_list:
-                return pd.DataFrame(columns=header_excel)
+        # 1. SHEET MCU KLINIK JEPARA (DATA MENTAH)
+        ws_raw = wb.create_sheet(title="MCU KLINIK JEPARA")
+        raw_headers = [h for h in headers if h != 'TTD']
+        ws_raw.append(raw_headers)
+        for r_idx, p in enumerate(rows, start=1):
+            row_data = [p.get(c, "") for c in cols_map]
+            ws_raw.append(row_data)
+
+        # FUNGSI MEMBUAT SHEET FORMAL (PENDAFTARAN, HADIR, TIDAK HADIR)
+        def build_styled_sheet(sheet_title, data_subset, is_pendaftaran=False):
+            ws = wb.create_sheet(title=sheet_title)
             
-            df_temp = pd.DataFrame(data_list)
-            for c in cols_export:
-                if c not in df_temp.columns:
-                    df_temp[c] = ""
+            # Header Judul Atas
+            ws.cell(row=1, column=1, value=judul_pt).font = Font(bold=True, size=11)
+            ws.cell(row=2, column=1, value=f"TANGGAL {tgl_indo_str}").font = Font(bold=True, size=11)
             
-            df_temp = df_temp[cols_export].copy()
-            df_temp['TTD'] = df_temp['no'] # Nomor TTD sesuai nomor urut presensi
+            # Row 3 Kosong
+            # Row 4 Table Header
+            for col_idx, text in enumerate(headers, start=1):
+                cell = ws.cell(row=4, column=col_idx, value=text)
+                cell.fill = FILL_HEADER
+                cell.font = Font(bold=True)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
             
-            if "SMJ" not in kode_pt:
-                df_temp['HAID/HAMIL'] = pd.DataFrame(data_list).get('haid', "")
+            # Isi Data Pasien & Beri Warna Sesuai Aturan
+            for r_idx, p in enumerate(data_subset, start=5):
+                # Tentukan Warna Baris
+                if is_pendaftaran:
+                    if p.get("kumpul"):
+                        row_fill = FILL_GREEN
+                    elif p.get("hadir"):
+                        row_fill = FILL_YELLOW
+                    else:
+                        row_fill = FILL_RED
+                else:
+                    row_fill = FILL_GREEN if sheet_title == "HADIR" else FILL_RED
 
-            df_temp.columns = header_excel
-            return df_temp
+                # Isi Kolom
+                for c_idx, key in enumerate(cols_map, start=1):
+                    val = p.get(key, "")
+                    cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                    cell.fill = row_fill
 
-        df_hadir_final = build_df_block(peserta_hadir)
-        df_tidak_final = build_df_block(peserta_tidak_hadir)
+                # Kolom TTD
+                cell_ttd = ws.cell(row=r_idx, column=len(cols_map) + 1, value=p.get("no", ""))
+                cell_ttd.fill = row_fill
+                cell_ttd.alignment = Alignment(horizontal="center")
 
+                # Kolom HAID/HAMIL (Khusus PWJ)
+                if "SMJ" not in kode_pt:
+                    cell_haid = ws.cell(row=r_idx, column=len(cols_map) + 2, value=p.get("haid", ""))
+                    cell_haid.fill = row_fill
+
+        # 2. SHEET PENDAFTARAN (Semua Peserta + Hijau/Kuning/Merah)
+        build_styled_sheet("PENDAFTARAN", rows, is_pendaftaran=True)
+
+        # 3. SHEET HADIR (Hanya Peserta Hadir + Hijau Semua)
+        peserta_hadir = [p for p in rows if p.get("hadir")]
+        build_styled_sheet("HADIR", peserta_hadir)
+
+        # 4. SHEET TIDAK HADIR (Hanya Peserta Tidak Hadir + Merah Semua)
+        peserta_tidak = [p for p in rows if not p.get("hadir")]
+        build_styled_sheet("TIDAK HADIR", peserta_tidak)
+
+        # Export ke Streamlit Download
         buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_hadir_final.to_excel(writer, index=False, sheet_name='HADIR')
-            df_tidak_final.to_excel(writer, index=False, sheet_name='TIDAK HADIR')
+        wb.save(buffer)
 
         st.download_button(
-            label=f"📄 Unduh Excel Final {kode_pt} (Sheet HADIR & TIDAK HADIR)",
+            label=f"📄 Unduh Excel Final Presisi 4 Sheet ({kode_pt})",
             data=buffer.getvalue(),
             file_name=f"MCU_{kode_pt}_{K['tgl']}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -396,7 +445,6 @@ else:
                     st.rerun()
 
     else:
-        # MENU SAAT MCU SUDAH DITUTUP
         if K.get("url"):
             st.markdown(f"[📂 Buka File Final Spreadsheet Drive]({K['url']})")
             st.markdown(f"[📥 Unduh File Excel Apps Script]({K['url'].replace('/edit', '/export?format=xlsx')})")
