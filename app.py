@@ -10,51 +10,61 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 # Setup Halaman
 st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="centered")
 
-# URL DEFAULT OTOMATIS KETEMPEL (TIDAK PERLU DICARI / KETIK LAGI)
+# URL DEFAULT OTOMATIS
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CUSTOM CSS KHUSUS HP & FULL BLOK WARNA KARTU ---
+# --- CSS SUPER RINGKAS KHUSUS TAMPILAN HP (TANPA PADDING / SPASI BERLEBIH) ---
 st.markdown("""
 <style>
-/* Ringkaskan tampilan di HP agar tidak terlalu panjang ke bawah */
+/* Hilangkan ruang kosong atas & samping layar HP */
 .block-container {
-    padding-top: 0.8rem !important;
-    padding-bottom: 2rem !important;
-    padding-left: 0.4rem !important;
-    padding-right: 0.4rem !important;
+    padding-top: 0.5rem !important;
+    padding-bottom: 1rem !important;
+    padding-left: 0.3rem !important;
+    padding-right: 0.3rem !important;
 }
 
-/* Base Expander (Kartu Peserta) */
+/* Jarak antar kartu pasien dibuat sangat rapat */
 div[data-testid="stExpander"] {
-    border-radius: 8px !important;
-    margin-bottom: 4px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-radius: 6px !important;
+    margin-bottom: 3px !important;
+    margin-top: 0px !important;
+    border: 1px solid #444 !important;
 }
 
-/* FULL BLOK WARNA KARTU PESERTA */
-.card-kuning div[data-testid="stExpander"] {
-    background-color: #F4F207 !important;
-    border: 2px solid #D4D200 !important;
+/* Summary Header Expander Dibuat Tipis & Rapat */
+div[data-testid="stExpander"] summary {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    font-size: 0.9rem !important;
 }
-.card-ijo div[data-testid="stExpander"] {
-    background-color: #92D050 !important;
-    border: 2px solid #76B035 !important;
+
+/* Hilangkan divider berlebih */
+hr {
+    margin-top: 0.4rem !important;
+    margin-bottom: 0.4rem !important;
 }
-.card-merah div[data-testid="stExpander"] {
-    background-color: #FF0000 !important;
-    border: 2px solid #CC0000 !important;
+
+/* Style Badge Statistik Sejajar (Hemat Tempat) */
+.stat-box {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
 }
-.card-merah div[data-testid="stExpander"] summary {
-    color: #FFFFFF !important;
+.stat-item {
+    text-align: center;
+}
+.stat-num {
     font-weight: bold;
-}
-
-/* Ringkaskan Tombol & Form */
-div[data-testid="stForm"] {
-    padding: 8px !important;
-}
-.stButton button {
-    padding: 4px 8px !important;
+    font-size: 1.1rem;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -92,7 +102,7 @@ def run_apps_script(fn, *args):
     try:
         data = response.json()
     except Exception:
-        raise Exception(f"Server mengembalikan respon non-JSON (Status {response.status_code}). Cek akses 'Anyone' di deployment Apps Script.")
+        raise Exception(f"Server mengembalikan respon non-JSON (Status {response.status_code}). Pastikan setelan deployment 'Anyone'.")
     
     if not data.get("ok"):
         raise Exception(data.get("error", "Terjadi kesalahan pada backend Apps Script."))
@@ -112,7 +122,6 @@ def format_tgl(tgl_str):
         return f"{parts[2]}-{parts[1]}-{parts[0]}"
     return str(tgl_str)
 
-# FUNGSI ANALISIS PINTAR NIK vs TANGGAL LAHIR
 def analisa_nik_vs_tgl(nik, tgl_str, jk):
     if not nik or len(str(nik).strip()) < 12 or not tgl_str or tgl_str == "-":
         return None
@@ -152,7 +161,6 @@ if not st.session_state.logged_in:
     st.title("🏥 MCU Registrasi")
     with st.form("login_form"):
         st.subheader("Masuk Aplikasi")
-        # URL OTOMATIS KETEMPEL DARI DEFAULT_URL
         input_url = st.text_input("Alamat Server (URL Web App)", value=DEFAULT_URL)
         input_pin = st.text_input("PIN", type="password")
         btn_login = st.form_submit_button("Masuk")
@@ -182,7 +190,7 @@ if not st.session_state.logged_in:
 # ==========================================
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
-    st.title("🏥 MCU Registrasi")
+    st.markdown("### 🏥 MCU Registrasi")
 with col_h2:
     if st.button("Keluar", type="secondary"):
         st.session_state.logged_in = False
@@ -284,7 +292,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI (HP RINGKAS)
+# 4. DETAIL KEGIATAN & PRESENSI (HP COMPACT)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -299,20 +307,24 @@ else:
             load_home_data()
             st.rerun()
     with col_b2:
-        status_text = " · Ditutup" if K.get("status") == "DITUTUP" else ""
-        st.subheader(f"{K['kode']} · {format_tgl(K['tgl'])}{status_text}")
+        status_text = " (Ditutup)" if K.get("status") == "DITUTUP" else ""
+        st.markdown(f"#### {K['kode']} · {format_tgl(K['tgl'])}{status_text}")
 
     # Search Bar Ringkas
-    q = st.text_input("🔍 Cari Nama, RM, NIK, No TTD", "").strip().upper()
+    q = st.text_input("🔍 Cari Nama, RM, NIK, No TTD", "", label_visibility="collapsed", placeholder="🔍 Cari Nama, RM, NIK, No TTD").strip().upper()
 
     sT = len(rows)
     sH = len([p for p in rows if p.get("hadir")])
     sK = len([p for p in rows if p.get("kumpul")])
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Peserta", sT)
-    m2.metric("Hadir", sH)
-    m3.metric("Berkas", sK)
+    # BARIS STATISTIK SEJAJAR 1 BARIS (HEMAT TEMPAT DEPAN HP)
+    st.markdown(f"""
+    <div class="stat-box">
+        <div class="stat-item">Peserta: <span class="stat-num">{sT}</span></div>
+        <div class="stat-item" style="color:#F4F207;">Hadir: <span class="stat-num">{sH}</span></div>
+        <div class="stat-item" style="color:#92D050;">Berkas: <span class="stat-num">{sK}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Filter Peserta
     filtered = []
@@ -327,106 +339,278 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    st.write("")
-
-    # LIST KARTU PESERTA DENGAN FULL BLOK WARNA (TANPA TEXT LINGKARAN KHUSUS)
+    # LIST KARTU PESERTA SANGAT RAPAT (TANPA CONTAINER SPASI TEBAL)
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
         
-        # Penentuan Class CSS Warna Kartu
-        if K.get("status") == "DITUTUP" and not hadir:
-            card_class = "card-merah"
-        elif kumpul:
-            card_class = "card-ijo"
-        elif hadir:
-            card_class = "card-kuning"
-        else:
-            card_class = "card-putih"
+        with st.expander(f"{p['no']}. {p['nama']} ({p['rm']})"):
+            err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
+            if err_nik:
+                st.error(err_nik)
 
-        # TAMPILKAN KARTU RINGKAS DENGAN CONTAINER CONTAINER WARNA
-        with st.container():
-            st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
-            with st.expander(f"{p['no']}. {p['nama']} ({p['rm']})"):
-                err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
-                if err_nik:
-                    st.error(err_nik)
+            st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
+            st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
+            if p.get("haid"):
+                st.info(f"Keterangan: **{p['haid']}**")
+            if p.get("cek"):
+                st.error(f"Perlu dicek dengan KTP: {p['cek']}")
 
-                st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
-                st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
-                if p.get("haid"):
-                    st.info(f"Keterangan: **{p['haid']}**")
-                if p.get("cek"):
-                    st.error(f"Perlu dicek dengan KTP: {p['cek']}")
-
-                if is_draft:
-                    col_act1, col_act2, col_act3 = st.columns([2, 2, 1])
-                    with col_act1:
-                        if not hadir:
-                            haid_final_val = ""
-                            jk_val = str(p.get("jk", "")).upper()
-                            
-                            if jk_val in ["P", "PEREMPUAN"]:
-                                opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"rad_h_{p['no']}")
-                                if opt_h == "HAID":
-                                    hari_h = st.selectbox("Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"sel_h_{p['no']}")
-                                    if hari_h == "Lainnya":
-                                        custom_h = st.text_input("Hari keberapa?", key=f"txt_h_{p['no']}").strip()
-                                        haid_final_val = f"HAID+{custom_h}" if custom_h else "HAID"
-                                    else:
-                                        haid_final_val = f"HAID+{hari_h}"
-                                elif opt_h == "HAMIL":
-                                    haid_final_val = "HAMIL"
-
-                            if st.button("Set Hadir", key=f"btn_h_{p['no']}", type="primary"):
-                                res_p = run_apps_script("setHadir", K["id"], p["no"], haid_final_val)
-                                p.update(res_p)
-                                st.rerun()
-
-                    with col_act2:
-                        if hadir and not kumpul:
-                            if st.button("Berkas Terkumpul", key=f"btn_k_{p['no']}"):
-                                res_p = run_apps_script("setKumpul", K["id"], p["no"])
-                                p.update(res_p)
-                                st.rerun()
-
-                    with col_act3:
-                        if st.button("✏️ Edit", key=f"btn_edit_{p['no']}"):
-                            st.session_state[f"edit_mode_{p['no']}"] = True
-
-                if st.session_state.get(f"edit_mode_{p['no']}", False):
-                    with st.form(key=f"form_edit_{p['no']}"):
-                        st.subheader(f"Edit Data No. {p['no']}")
-                        e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
-                        e_rm = st.text_input("No RM", value=p.get("rm", ""))
-                        e_nik = st.text_input("NIK", value=str(p.get("nik", "")))
-                        e_tgl = st.text_input("Tgl Lahir (YYYY-MM-DD)", value=str(p.get("tgl", "")))
-                        e_jk = st.selectbox("Jenis Kelamin", ["L", "P"], index=0 if str(p.get("jk","")).upper().startswith("L") else 1)
+            if is_draft:
+                col_act1, col_act2, col_act3 = st.columns([2, 2, 1])
+                with col_act1:
+                    if not hadir:
+                        haid_final_val = ""
+                        jk_val = str(p.get("jk", "")).upper()
                         
-                        c_save, c_canc = st.columns(2)
-                        with c_save:
-                            if st.form_submit_button("💾 Simpan"):
-                                data_update = {
-                                    "nama": e_nama,
-                                    "rm": e_rm,
-                                    "nik": e_nik,
-                                    "tgl": e_tgl,
-                                    "jk": e_jk
-                                }
-                                res_upd = run_apps_script("simpanPeserta", K["id"], p["no"], data_update)
-                                p.update(res_upd)
-                                st.session_state[f"edit_mode_{p['no']}"] = False
-                                st.success("Tersimpan!")
-                                st.rerun()
-                        with c_canc:
-                            if st.form_submit_button("Batal"):
-                                st.session_state[f"edit_mode_{p['no']}"] = False
-                                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+                        if jk_val in ["P", "PEREMPUAN"]:
+                            opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"rad_h_{p['no']}")
+                            if opt_h == "HAID":
+                                hari_h = st.selectbox("Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"sel_h_{p['no']}")
+                                if hari_h == "Lainnya":
+                                    custom_h = st.text_input("Hari keberapa?", key=f"txt_h_{p['no']}").strip()
+                                    haid_final_val = f"HAID+{custom_h}" if custom_h else "HAID"
+                                else:
+                                    haid_final_val = f"HAID+{hari_h}"
+                            elif opt_h == "HAMIL":
+                                haid_final_val = "HAMIL"
+
+                        if st.button("Set Hadir", key=f"btn_h_{p['no']}", type="primary"):
+                            res_p = run_apps_script("setHadir", K["id"], p["no"], haid_final_val)
+                            p.update(res_p)
+                            st.rerun()
+
+                with col_act2:
+                    if hadir and not kumpul:
+                        if st.button("Berkas Terkumpul", key=f"btn_k_{p['no']}"):
+                            res_p = run_apps_script("setKumpul", K["id"], p["no"])
+                            p.update(res_p)
+                            st.rerun()
+
+                with col_act3:
+                    if st.button("✏️ Edit", key=f"btn_edit_{p['no']}"):
+                        st.session_state[f"edit_mode_{p['no']}"] = True
+
+            if st.session_state.get(f"edit_mode_{p['no']}", False):
+                with st.form(key=f"form_edit_{p['no']}"):
+                    st.subheader(f"Edit Data No. {p['no']}")
+                    e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
+                    e_rm = st.text_input("No RM", value=p.get("rm", ""))
+                    e_nik = st.text_input("NIK", value=str(p.get("nik", "")))
+                    e_tgl = st.text_input("Tgl Lahir (YYYY-MM-DD)", value=str(p.get("tgl", "")))
+                    e_jk = st.selectbox("Jenis Kelamin", ["L", "P"], index=0 if str(p.get("jk","")).upper().startswith("L") else 1)
+                    
+                    c_save, c_canc = st.columns(2)
+                    with c_save:
+                        if st.form_submit_button("💾 Simpan"):
+                            data_update = {
+                                "nama": e_nama,
+                                "rm": e_rm,
+                                "nik": e_nik,
+                                "tgl": e_tgl,
+                                "jk": e_jk
+                            }
+                            res_upd = run_apps_script("simpanPeserta", K["id"], p["no"], data_update)
+                            p.update(res_upd)
+                            st.session_state[f"edit_mode_{p['no']}"] = False
+                            st.success("Tersimpan!")
+                            st.rerun()
+                    with c_canc:
+                        if st.form_submit_button("Batal"):
+                            st.session_state[f"edit_mode_{p['no']}"] = False
+                            st.rerun()
 
     # TAMBAH MANUAL PESERTA
     if K.get("status") == "DRAFT":
         with st.expander("➕ Tambah Peserta Manual"):
             with st.form("form_tambah_manual"):
-                m_nama = st.text
+                m_nama = st.text_input("Nama Lengkap")
+                m_rm = st.text_input("No RM")
+                m_nik = st.text_input("NIK (16 Digit)")
+                m_tgl = st.date_input("Tanggal Lahir", datetime(2000, 1, 1))
+                m_jk = st.selectbox("Jenis Kelamin", ["L", "P"])
+                
+                if st.form_submit_button("Simpan Peserta Manual", type="primary"):
+                    if m_nama and m_rm:
+                        new_data = {
+                            "nama": m_nama,
+                            "rm": m_rm,
+                            "nik": m_nik,
+                            "tgl": m_tgl.strftime("%Y-%m-%d"),
+                            "jk": m_jk,
+                            "status": "BELUM"
+                        }
+                        res_new = run_apps_script("tambahPeserta", K["id"], new_data)
+                        rows.append(res_new)
+                        st.success(f"{m_nama} berhasil ditambahkan!")
+                        st.rerun()
+                    else:
+                        st.error("Nama dan No RM wajib diisi!")
+
+    st.divider()
+
+    # ==========================================
+    # EXPORT EXCEL 4 SHEET PERFEK (F4F207 KUNING, BORDER, ALIGNMENT, HAID+1)
+    # ==========================================
+    if rows:
+        st.subheader("📥 Export File Excel Final (4 Sheet)")
+        
+        kode_pt = str(K.get("kode", "")).upper()
+        tgl_indo_str = format_tgl(K.get("tgl"))
+        
+        FILL_GREEN = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")
+        FILL_YELLOW = PatternFill(start_color="F4F207", end_color="F4F207", fill_type="solid")
+        FILL_RED = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+        FILL_HEADER = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+
+        THIN_SIDE = Side(border_style="thin", color="000000")
+        TABLE_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
+
+        ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
+        ALIGN_LEFT = Alignment(horizontal="left", vertical="center")
+
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+
+        if "SMJ" in kode_pt:
+            judul_pt = "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY"
+            headers = ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR (BLN-TGL-THN)', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD', 'HAID/HAMIL']
+            cols_map = ['no', 'rm', 'nama', 'jk', 'tgl', 'usia', 'nik', 'hp', 'jenis']
+        else:
+            judul_pt = "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA"
+            headers = ['NO', 'NO RM', 'NAMA', 'NO. URUT MCU', 'BAGIAN', 'JABATAN', 'TEMPAT LAHIR', 'TANGGAL LAHIR', 'USIA', 'JENIS KELAMIN', 'NO HP', 'NO. KTP', 'TTD', 'HAID/HAMIL']
+            cols_map = ['no', 'rm', 'nama', 'urut', 'bagian', 'jabatan', 'tempat', 'tgl', 'usia', 'jk', 'hp', 'nik']
+
+        ws_raw = wb.create_sheet(title="MCU KLINIK JEPARA")
+        ws_raw.append(headers)
+        for p in rows:
+            r_val = [p.get(c, "") for c in cols_map] + [p.get("no", ""), p.get("haid", "")]
+            ws_raw.append(r_val)
+
+        def build_styled_sheet(sheet_title, data_subset, is_pendaftaran=False):
+            ws = wb.create_sheet(title=sheet_title)
+            
+            ws.cell(row=1, column=1, value=judul_pt).font = Font(bold=True, size=11)
+            ws.cell(row=2, column=1, value=f"TANGGAL {tgl_indo_str}").font = Font(bold=True, size=11)
+            
+            for col_idx, text in enumerate(headers, start=1):
+                cell = ws.cell(row=4, column=col_idx, value=text)
+                cell.fill = FILL_HEADER
+                cell.font = Font(bold=True)
+                cell.alignment = ALIGN_CENTER
+                cell.border = TABLE_BORDER
+            
+            for r_idx, p in enumerate(data_subset, start=5):
+                if is_pendaftaran:
+                    if p.get("kumpul"):
+                        row_fill = FILL_GREEN
+                    elif p.get("hadir"):
+                        row_fill = FILL_YELLOW
+                    else:
+                        row_fill = FILL_RED
+                else:
+                    row_fill = FILL_GREEN if sheet_title == "HADIR" else FILL_RED
+
+                for c_idx, key in enumerate(cols_map, start=1):
+                    val = p.get(key, "")
+                    cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                    cell.fill = row_fill
+                    cell.border = TABLE_BORDER
+                    
+                    if key == "nama":
+                        cell.alignment = ALIGN_LEFT
+                    else:
+                        cell.alignment = ALIGN_CENTER
+
+                col_ttd_idx = len(cols_map) + 1
+                cell_ttd = ws.cell(row=r_idx, column=col_ttd_idx, value=p.get("no", ""))
+                cell_ttd.fill = row_fill
+                cell_ttd.border = TABLE_BORDER
+                cell_ttd.alignment = ALIGN_CENTER
+
+                col_haid_idx = len(cols_map) + 2
+                cell_haid = ws.cell(row=r_idx, column=col_haid_idx, value=p.get("haid", ""))
+                cell_haid.fill = row_fill
+                cell_haid.border = TABLE_BORDER
+                cell_haid.alignment = ALIGN_CENTER
+
+        build_styled_sheet("PENDAFTARAN", rows, is_pendaftaran=True)
+        peserta_hadir = [p for p in rows if p.get("hadir")]
+        build_styled_sheet("HADIR", peserta_hadir)
+        peserta_tidak = [p for p in rows if not p.get("hadir")]
+        build_styled_sheet("TIDAK HADIR", peserta_tidak)
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+
+        st.download_button(
+            label=f"📄 Unduh Excel Final ({kode_pt})",
+            data=buffer.getvalue(),
+            file_name=f"MCU_{kode_pt}_{K['tgl']}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+    st.divider()
+
+    # --- CLOSE MCU & BUKA LAGI ---
+    if K.get("status") == "DRAFT":
+        if st.button("🔒 Close MCU", type="primary", use_container_width=True):
+            try:
+                with st.spinner("Memproses penutupan MCU..."):
+                    res_close = run_apps_script("tutup", K["id"])
+                    
+                    if isinstance(res_close, dict) and res_close.get("perlu"):
+                        st.session_state.pilih_beda = res_close
+                        st.rerun()
+                    else:
+                        st.session_state.active_kegiatan = res_close
+                        if "pilih_beda" in st.session_state:
+                            del st.session_state.pilih_beda
+                        st.success(f"MCU {K['kode']} berhasil ditutup!")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Gagal Close MCU: {e}")
+
+        if "pilih_beda" in st.session_state and st.session_state.pilih_beda:
+            pb = st.session_state.pilih_beda
+            st.warning(f"⚠️ Ada {pb.get('jumlah', 0)} perbedaan data olahan dengan file pendaftaran awal.")
+            
+            col_aw, col_ol = st.columns(2)
+            with col_aw:
+                if st.button("Sesuai Data Awal"):
+                    res_close = run_apps_script("tutup", K["id"], "AWAL")
+                    st.session_state.active_kegiatan = res_close
+                    del st.session_state.pilih_beda
+                    st.rerun()
+            with col_ol:
+                if st.button("Sesuai Data Olahan"):
+                    res_close = run_apps_script("tutup", K["id"], "OLAHAN")
+                    st.session_state.active_kegiatan = res_close
+                    del st.session_state.pilih_beda
+                    st.rerun()
+
+    else:
+        if K.get("url"):
+            st.markdown(f"[📂 Buka File Final Spreadsheet Drive]({K['url']})")
+            st.markdown(f"[📥 Unduh File Excel Apps Script]({K['url'].replace('/edit', '/export?format=xlsx')})")
+        
+        st.info("Status MCU saat ini: **DITUTUP**.")
+        if st.button("🔓 Buka lagi untuk diedit", use_container_width=True, type="primary"):
+            try:
+                with st.spinner("Membuka kembali MCU..."):
+                    res_buka = run_apps_script("bukaLagi", K["id"])
+                    st.session_state.active_kegiatan = res_buka
+                    st.success("MCU berhasil dibuka kembali!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Gagal membuka MCU: {e}")
+
+    # Reset MCU Spesifik
+    with st.expander("⚠️ Reset Data MCU Ini"):
+        if st.button("Hapus MCU Ini", type="secondary"):
+            run_apps_script("resetKegiatan", K["id"])
+            st.session_state.active_kegiatan = None
+            load_home_data()
+            st.rerun()
