@@ -160,9 +160,6 @@
             <div style="color:var(--green);">Berkas: <span id="statKumpul" style="font-weight:bold;">0</span></div>
         </div>
 
-        <!-- TOMBOL EXPORT EXCEL LANGSUNG (TANPA CLOSE) -->
-        <button onclick="exportToExcel()" style="background:var(--green); color:#000; margin-bottom: 10px;">📥 Unduh File Excel (.xlsx)</button>
-
         <!-- FORM TAMBAH PESERTA MANUAL -->
         <div class="card" style="background:#181818; border-color:#444;">
             <details>
@@ -184,6 +181,9 @@
         </div>
 
         <div id="participantList"></div>
+
+        <!-- TOMBOL EXPORT EXCEL 4 SHEET (DIBAWAH DAFTAR PESERTA, SEBELUM CLOSE MCU) -->
+        <button onclick="exportToExcel4Sheets()" style="background:var(--green); color:#000; margin-top: 10px; margin-bottom: 10px;">📥 Unduh File Excel Final (4 Sheet)</button>
 
         <!-- MODAL PILIH BEDA SAAT TUTUP MCU -->
         <div id="conflictBox" class="card hidden" style="border: 2px solid var(--yellow); margin-top:10px;">
@@ -450,57 +450,54 @@
         filterParticipants();
     }
 
-    // EXPORT EXCEL LANGSUNG DI BROWSER TANPA CLOSE MCU
-    function exportToExcel() {
+    // EXPORT EXCEL 4 SHEET PERSIS SEPERTI FORMAT PYTHON SEBELUMNYA
+    function exportToExcel4Sheets() {
         let K = appData.activeKegiatan;
         if (!K || !K.rows) return;
 
         let wb = XLSX.utils.book_new();
+        let kodePt = String(K.kode || "").toUpperCase();
 
-        // Siapkan data untuk sheet Pendaftaran / Semua Peserta
-        let dataPendaftaran = K.rows.map(p => ({
-            "NO": p.no,
-            "NO RM": p.rm,
-            "NAMA": p.nama,
-            "JK": p.jk,
-            "TANGGAL LAHIR": p.tgl,
-            "USIA": p.usia || "",
-            "NO KTP": p.nik || "",
-            "HAID/HAMIL": p.haid || "",
-            "STATUS HADIR": p.hadir ? "HADIR" : "BELUM"
-        }));
+        let headers = kodePt.includes("SMJ") 
+            ? ['NO', 'NO RM', 'NAMA', 'JK', 'TANGGAL LAHIR', 'USIA', 'NO KTP', 'NO HP', 'JENIS MCU', 'TTD', 'HAID/HAMIL']
+            : ['NO', 'NO RM', 'NAMA', 'NO. URUT MCU', 'BAGIAN', 'JABATAN', 'TEMPAT LAHIR', 'TANGGAL LAHIR', 'USIA', 'JENIS KELAMIN', 'NO HP', 'NO. KTP', 'TTD', 'HAID/HAMIL'];
 
-        let wsPendaftaran = XLSX.utils.json_to_sheet(dataPendaftaran);
-        XLSX.utils.book_append_sheet(wb, wsPendaftaran, "PENDAFTARAN");
+        // 1. Sheet: MCU KLINIK JEPARA
+        let rawData = [
+            [kodePt.includes("SMJ") ? "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY" : "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA"],
+            [`TANGGAL ${K.tgl}`],
+            [],
+            headers
+        ];
+        K.rows.forEach(p => {
+            rawData.push([
+                p.no, p.rm, p.nama, p.jk || "", p.tgl || "", p.usia || "", p.nik || "", p.hp || "", p.jenis || "", p.no, p.haid || ""
+            ]);
+        });
+        let wsRaw = XLSX.utils.aoa_to_sheet(rawData);
+        XLSX.utils.book_append_sheet(wb, wsRaw, "MCU KLINIK JEPARA");
 
-        // Sheet Hadir Saja
-        let dataHadir = K.rows.filter(p => p.hadir).map(p => ({
-            "NO": p.no,
-            "NO RM": p.rm,
-            "NAMA": p.nama,
-            "JK": p.jk,
-            "TANGGAL LAHIR": p.tgl,
-            "USIA": p.usia || "",
-            "NO KTP": p.nik || "",
-            "HAID/HAMIL": p.haid || ""
-        }));
-        let wsHadir = XLSX.utils.json_to_sheet(dataHadir);
-        XLSX.utils.book_append_sheet(wb, wsHadir, "HADIR");
+        // Helper builder untuk sheet PENDAFTARAN, HADIR, TIDAK HADIR
+        function createStyledSheet(sheetName, subsetRows) {
+            let sData = [
+                [kodePt.includes("SMJ") ? "DAFTAR HADIR MEDICAL CHECK UP PT SAMI JEPARA FACTORY" : "DAFTAR HADIR MEDICAL CHECK UP PT PARKLAND WORLD INDONESIA"],
+                [`TANGGAL ${K.tgl}`],
+                [],
+                headers
+            ];
+            subsetRows.forEach(p => {
+                sData.push([
+                    p.no, p.rm, p.nama, p.jk || "", p.tgl || "", p.usia || "", p.nik || "", p.hp || "", p.jenis || "", p.no, p.haid || ""
+                ]);
+            });
+            let ws = XLSX.utils.aoa_to_sheet(sData);
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        }
 
-        // Sheet Tidak Hadir Saja
-        let dataTidakHadir = K.rows.filter(p => !p.hadir).map(p => ({
-            "NO": p.no,
-            "NO RM": p.rm,
-            "NAMA": p.nama,
-            "JK": p.jk,
-            "TANGGAL LAHIR": p.tgl,
-            "USIA": p.usia || "",
-            "NO KTP": p.nik || ""
-        }));
-        let wsTidakHadir = XLSX.utils.json_to_sheet(dataTidakHadir);
-        XLSX.utils.book_append_sheet(wb, wsTidakHadir, "TIDAK HADIR");
+        createStyledSheet("PENDAFTARAN", K.rows);
+        createStyledSheet("HADIR", K.rows.filter(p => p.hadir));
+        createStyledSheet("TIDAK HADIR", K.rows.filter(p => !p.hadir));
 
-        // Download file .xlsx
         let fileName = `MCU_${K.kode}_${K.tgl}.xlsx`;
         XLSX.writeFile(wb, fileName);
     }
