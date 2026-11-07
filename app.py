@@ -12,9 +12,10 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS PRESISI UNTUK TAMPILAN HP SUPER RINGKAS & FULL BLOK WARNA ---
+# --- CSS INJECTION: MEMAKSA EXPANDER UNTUK FULL BLOK WARNA MENYALA DI HP ---
 st.markdown("""
 <style>
+/* Ringkaskan margin HP */
 .block-container {
     padding-top: 0.4rem !important;
     padding-bottom: 1rem !important;
@@ -23,42 +24,56 @@ st.markdown("""
 }
 
 /* Jarak antar kartu sangat rapat */
-.card-wrapper {
+div[data-testid="stExpander"] {
+    border-radius: 6px !important;
     margin-bottom: 4px !important;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 0.9rem;
+    margin-top: 0px !important;
+    border: 1px solid #444 !important;
 }
 
-/* KUNING HADIR */
-.bg-kuning {
+/* KUNING HADIR (#F4F207) */
+.st-kuning div[data-testid="stExpander"] {
     background-color: #F4F207 !important;
+    border: 2px solid #C4C200 !important;
+}
+.st-kuning div[data-testid="stExpander"] summary,
+.st-kuning div[data-testid="stExpander"] summary * {
     color: #000000 !important;
-    border: 1.5px solid #C4C200 !important;
+    font-weight: bold !important;
 }
 
-/* HIJAU BERKAS TERKUMPUL */
-.bg-ijo {
+/* HIJAU BERKAS TERKUMPUL (#92D050) */
+.st-ijo div[data-testid="stExpander"] {
     background-color: #92D050 !important;
+    border: 2px solid #6A9E32 !important;
+}
+.st-ijo div[data-testid="stExpander"] summary,
+.st-ijo div[data-testid="stExpander"] summary * {
     color: #000000 !important;
-    border: 1.5px solid #6A9E32 !important;
+    font-weight: bold !important;
 }
 
-/* MERAH TIDAK HADIR */
-.bg-merah {
+/* MERAH TIDAK HADIR (#FF0000) */
+.st-merah div[data-testid="stExpander"] {
     background-color: #FF0000 !important;
+    border: 2px solid #B30000 !important;
+}
+.st-merah div[data-testid="stExpander"] summary,
+.st-merah div[data-testid="stExpander"] summary * {
     color: #FFFFFF !important;
-    border: 1.5px solid #B30000 !important;
+    font-weight: bold !important;
 }
 
-/* BELUM HADIR (STANDAR) */
-.bg-putih {
-    background-color: #262730 !important;
-    color: #FFFFFF !important;
-    border: 1px solid #444444 !important;
+/* Header Expander Rapat */
+div[data-testid="stExpander"] summary {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    font-size: 0.95rem !important;
 }
 
-/* Badge Statistik Sejajar */
+/* Badge Statistik Sejajar Hemat Tempat */
 .stat-box {
     background-color: #1e1e1e;
     border: 1px solid #333;
@@ -94,8 +109,6 @@ if "kegiatan_list" not in st.session_state:
     st.session_state.kegiatan_list = []
 if "active_kegiatan" not in st.session_state:
     st.session_state.active_kegiatan = None
-if "selected_peserta" not in st.session_state:
-    st.session_state.selected_peserta = None
 
 def run_apps_script(fn, *args):
     url = st.session_state.url or DEFAULT_URL
@@ -210,7 +223,6 @@ with col_h2:
         st.session_state.logged_in = False
         st.session_state.pin = ""
         st.session_state.active_kegiatan = None
-        st.session_state.selected_peserta = None
         st.rerun()
 
 # ==========================================
@@ -317,7 +329,6 @@ else:
     with col_b1:
         if st.button("⬅️ Kembali"):
             st.session_state.active_kegiatan = None
-            st.session_state.selected_peserta = None
             if "pilih_beda" in st.session_state:
                 del st.session_state.pilih_beda
             load_home_data()
@@ -352,54 +363,37 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # LOOP KARTU DENGAN 100% FULL BLOK WARNA MURNI & NUTUP OTOMATIS
+    # RENDER EXPANDER PESERTA DENGAN CONTAINER KHUSUS UNTUK MEMAKSA BLOK WARNA
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
         no_p = p['no']
         
-        # Penentuan Kelas CSS Blok Warna Kartu
+        # Tentukan Warna Pembungkus Card
         if K.get("status") == "DITUTUP" and not hadir:
-            bg_cls = "bg-merah"
+            card_class = "st-merah"
         elif kumpul:
-            bg_cls = "bg-ijo"
+            card_class = "st-ijo"
         elif hadir:
-            bg_cls = "bg-kuning"
+            card_class = "st-kuning"
         else:
-            bg_cls = "bg-putih"
+            card_class = "st-putih"
 
-        is_open = (st.session_state.selected_peserta == no_p)
-
-        # 1. RENDERING KARTU KOTAK BLOK WARNA
-        col_card1, col_card2 = st.columns([8, 2])
-        with col_card1:
-            st.markdown(f"""
-            <div class="card-wrapper {bg_cls}">
-                <b>{no_p}. {p['nama']}</b> ({p['rm']})
-            </div>
-            """, unsafe_allow_html=True)
-        with col_card2:
-            btn_txt = "▲ Tutup" if is_open else "▼ Buka"
-            if st.button(btn_txt, key=f"tgl_{no_p}", use_container_width=True):
-                if is_open:
-                    st.session_state.selected_peserta = None
-                else:
-                    st.session_state.selected_peserta = no_p
-                st.rerun()
-
-        # 2. ISI DETAIL EXPANDER (HANYA MUNCUL JIKA DIBUKA)
-        if is_open:
-            with st.container():
-                st.info(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}\n\n"
-                        f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
-                
+        # WRAPPER CONTAINER KHUSUS SUPAYA BLOK WARNA WARNI TEGAS TAMPIL DI HP
+        with st.container():
+            st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
+            
+            # EXPANDER STANDAR (KLIK JUDUL NAMA PESERTA LANGSUNG MEKAR/MUTUP)
+            with st.expander(f"{p['no']}. {p['nama']} ({p['rm']})"):
                 err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
                 if err_nik:
                     st.error(err_nik)
 
+                st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
+                st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
                 if p.get("haid"):
-                    st.warning(f"Keterangan Tambahan: **{p['haid']}**")
+                    st.info(f"Keterangan: **{p['haid']}**")
                 if p.get("cek"):
                     st.error(f"Perlu dicek dengan KTP: {p['cek']}")
 
@@ -422,20 +416,18 @@ else:
                                 elif opt_h == "HAMIL":
                                     haid_final_val = "HAMIL"
 
-                            # KLIK SET HADIR -> KARTU AUTOMATIS LANGSUNG CLOSED!
+                            # KLIK SET HADIR -> REFRESH DAN OTOMATIS TERTUTUP KARENA STATUS UPDATED!
                             if st.button("Set Hadir", key=f"btn_h_{no_p}", type="primary"):
                                 res_p = run_apps_script("setHadir", K["id"], no_p, haid_final_val)
                                 p.update(res_p)
-                                st.session_state.selected_peserta = None # AUTO CLOSE
                                 st.rerun()
 
                     with col_act2:
                         if hadir and not kumpul:
-                            # KLIK BERKAS -> KARTU AUTOMATIS LANGSUNG CLOSED!
+                            # KLIK BERKAS TERKUMPUL -> REFRESH DAN OTOMATIS TERTUTUP!
                             if st.button("Berkas Terkumpul", key=f"btn_k_{no_p}"):
                                 res_p = run_apps_script("setKumpul", K["id"], no_p)
                                 p.update(res_p)
-                                st.session_state.selected_peserta = None # AUTO CLOSE
                                 st.rerun()
 
                     with col_act3:
@@ -464,13 +456,14 @@ else:
                                 res_upd = run_apps_script("simpanPeserta", K["id"], no_p, data_update)
                                 p.update(res_upd)
                                 st.session_state[f"edit_mode_{no_p}"] = False
-                                st.session_state.selected_peserta = None # AUTO CLOSE
                                 st.success("Tersimpan!")
                                 st.rerun()
                         with c_canc:
                             if st.form_submit_button("Batal"):
                                 st.session_state[f"edit_mode_{no_p}"] = False
                                 st.rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # TAMBAH MANUAL PESERTA
     if K.get("status") == "DRAFT":
