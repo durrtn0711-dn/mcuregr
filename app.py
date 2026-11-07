@@ -278,19 +278,45 @@ else:
                             res_p = run_apps_script("setKumpul", K["id"], p["no"])
                             p.update(res_p)
                             st.rerun()
-
+# Penanganan jika Apps Script mengembalikan perbedaan data (pilihBeda)
+if "pilih_beda" in st.session_state and st.session_state.pilih_beda:
+    pb = st.session_state.pilih_beda
+    st.warning(f"⚠️ Ada {pb['jumlah']} perbedaan data olahan dengan file pendaftaran awal.")
+    
+    col_aw, col_ol = st.columns(2)
+    with col_aw:
+        if st.button("Pakai Data Awal"):
+            res_close = run_apps_script("tutup", K["id"], "AWAL")
+            st.session_state.active_kegiatan = res_close
+            del st.session_state.pilih_beda
+            st.rerun()
+    with col_ol:
+        if st.button("Pakai Data Olahan"):
+            res_close = run_apps_script("tutup", K["id"], "OLAHAN")
+            st.session_state.active_kegiatan = res_close
+            del st.session_state.pilih_beda
+            st.rerun()
     st.divider()
 
     # Tombol Aksi Bawah (Close MCU / Re-open / Reset)
     if K.get("status") == "DRAFT":
         if st.button("➕ Tambah peserta manual", use_container_width=True):
             st.warning("Gunakan menu tambah manual pada Apps Script.")
-
-        if st.button("🔒 Close MCU", type="primary", use_container_width=True):
+if st.button("🔒 Close MCU", type="primary", use_container_width=True):
+    try:
+        with st.spinner("Menutup MCU & memproses file final..."):
             res_close = run_apps_script("tutup", K["id"])
-            st.session_state.active_kegiatan = res_close
-            st.success(f"MCU {K['kode']} berhasil ditutup!")
-            st.rerun()
+            
+            # Jika ada perbedaan data (perlu konfirmasi AWAL / OLAHAN)
+            if isinstance(res_close, dict) and res_close.get("perlu"):
+                st.session_state.pilih_beda = res_close
+                st.rerun()
+            else:
+                st.session_state.active_kegiatan = res_close
+                st.success(f"MCU {K['kode']} berhasil ditutup!")
+                st.rerun()
+    except Exception as e:
+        st.error(f"Gagal Close MCU dari Apps Script: {e}")
     else:
         if K.get("url"):
             st.markdown(f"[📂 Buka File Final]({K['url']})", unsafe_allow_group=True)
