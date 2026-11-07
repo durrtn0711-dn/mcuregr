@@ -12,9 +12,10 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS PERMANEN UNTUK TAMPILAN HP SUPER RAPAT & BERSIH ---
+# --- GLOBAL CSS PERMANEN: RAKET & 100% BLOK WARNA TERKUNCI ---
 st.markdown("""
 <style>
+/* Reset Padding Layar HP */
 .block-container {
     padding-top: 0.3rem !important;
     padding-bottom: 1rem !important;
@@ -22,11 +23,16 @@ st.markdown("""
     padding-right: 0.2rem !important;
 }
 
+/* Hilangkan Spasi Kosong Antar Baris di HP */
+div[data-testid="stVerticalBlock"] {
+    gap: 0.1rem !important;
+}
 div[data-testid="stVerticalBlock"] > div {
-    gap: 0.15rem !important;
+    gap: 0.1rem !important;
+    margin-bottom: 0px !important;
 }
 
-/* Header Statistik Sejajar */
+/* Badge Statistik Sejajar Hemat Tempat */
 .stat-box {
     background-color: #1e1e1e;
     border: 1px solid #333;
@@ -43,10 +49,57 @@ div[data-testid="stVerticalBlock"] > div {
     font-size: 1.1rem;
 }
 
-/* Hilangkan margin bawaan tombol Streamlit */
-div.stButton > button {
-    margin: 0px !important;
-    padding: 0px !important;
+/* STYLE TOMBOL UTAMA PESERTA */
+div[data-testid="stButton"] > button {
+    width: 100% !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    padding: 9px 12px !important;
+    border-radius: 6px !important;
+    font-weight: bold !important;
+    font-size: 0.9rem !important;
+    margin-top: 1px !important;
+    margin-bottom: 1px !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* KARTU HADIR (KUNING #F4F207) */
+div[data-testid="stButton"] > button.card-kuning {
+    background-color: #F4F207 !important;
+    color: #000000 !important;
+    border: 1.5px solid #C4C200 !important;
+}
+
+/* KARTU BERKAS TERKUMPUL (HIJAU #92D050) */
+div[data-testid="stButton"] > button.card-ijo {
+    background-color: #92D050 !important;
+    color: #000000 !important;
+    border: 1.5px solid #6A9E32 !important;
+}
+
+/* KARTU TIDAK HADIR / DITUTUP (MERAH #FF0000) */
+div[data-testid="stButton"] > button.card-merah {
+    background-color: #FF0000 !important;
+    color: #FFFFFF !important;
+    border: 1.5px solid #B30000 !important;
+}
+
+/* KARTU BELUM HADIR (STANDAR ABU/HITAM) */
+div[data-testid="stButton"] > button.card-putih {
+    background-color: #262730 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #444444 !important;
+}
+
+/* PANEL DETAIL PESERTA MEKAR */
+.detail-panel {
+    background-color: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-top: 2px;
+    margin-bottom: 4px;
+    color: #ffffff;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -64,6 +117,8 @@ if "kegiatan_list" not in st.session_state:
     st.session_state.kegiatan_list = []
 if "active_kegiatan" not in st.session_state:
     st.session_state.active_kegiatan = None
+if "selected_peserta" not in st.session_state:
+    st.session_state.selected_peserta = None
 
 def run_apps_script(fn, *args):
     url = st.session_state.url or DEFAULT_URL
@@ -137,82 +192,6 @@ def analisa_nik_vs_tgl(nik, tgl_str, jk):
     return None
 
 # ==========================================
-# POP-UP DIALOG UNTUK PROSES PRESENSI / EDIT
-# ==========================================
-@st.dialog("📋 Detail & Presensi Peserta")
-def popup_detail_peserta(p, K):
-    is_draft = K.get("status") == "DRAFT"
-    hadir = p.get("hadir")
-    kumpul = p.get("kumpul")
-    no_p = p['no']
-
-    st.markdown(f"### {no_p}. {p['nama']}")
-    st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
-    st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
-    
-    err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
-    if err_nik:
-        st.error(err_nik)
-
-    if p.get("haid"):
-        st.warning(f"Keterangan: **{p['haid']}**")
-    if p.get("cek"):
-        st.error(f"Perlu dicek dengan KTP: {p['cek']}")
-
-    st.divider()
-
-    if is_draft:
-        if not hadir:
-            st.subheader("Opsi Kehadiran")
-            haid_final_val = ""
-            jk_val = str(p.get("jk", "")).upper()
-            
-            if jk_val in ["P", "PEREMPUAN"]:
-                opt_h = st.radio("Status Khusus Perempuan", ["Tidak ada", "HAID", "HAMIL"], key=f"pop_rad_{no_p}")
-                if opt_h == "HAID":
-                    hari_h = st.selectbox("Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"pop_sel_{no_p}")
-                    if hari_h == "Lainnya":
-                        custom_h = st.text_input("Hari keberapa?", key=f"pop_txt_{no_p}").strip()
-                        haid_final_val = f"HAID+{custom_h}" if custom_h else "HAID"
-                    else:
-                        haid_final_val = f"HAID+{hari_h}"
-                elif opt_h == "HAMIL":
-                    haid_final_val = "HAMIL"
-
-            if st.button("✅ Set Hadir", type="primary", use_container_width=True):
-                res_p = run_apps_script("setHadir", K["id"], no_p, haid_final_val)
-                p.update(res_p)
-                st.rerun()
-
-        elif hadir and not kumpul:
-            if st.button("📁 Berkas Terkumpul", type="primary", use_container_width=True):
-                res_p = run_apps_script("setKumpul", K["id"], no_p)
-                p.update(res_p)
-                st.rerun()
-
-    # FORM EDIT
-    with st.expander("✏️ Edit Data Peserta Ini"):
-        with st.form(key=f"form_pop_edit_{no_p}"):
-            e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
-            e_rm = st.text_input("No RM", value=p.get("rm", ""))
-            e_nik = st.text_input("NIK", value=str(p.get("nik", "")))
-            e_tgl = st.text_input("Tgl Lahir (YYYY-MM-DD)", value=str(p.get("tgl", "")))
-            e_jk = st.selectbox("Jenis Kelamin", ["L", "P"], index=0 if str(p.get("jk","")).upper().startswith("L") else 1)
-            
-            if st.form_submit_button("💾 Simpan Perubahan", use_container_width=True):
-                data_update = {
-                    "nama": e_nama,
-                    "rm": e_rm,
-                    "nik": e_nik,
-                    "tgl": e_tgl,
-                    "jk": e_jk
-                }
-                res_upd = run_apps_script("simpanPeserta", K["id"], no_p, data_update)
-                p.update(res_upd)
-                st.success("Tersimpan!")
-                st.rerun()
-
-# ==========================================
 # 1. HALAMAN LOGIN
 # ==========================================
 if not st.session_state.logged_in:
@@ -254,6 +233,7 @@ with col_h2:
         st.session_state.logged_in = False
         st.session_state.pin = ""
         st.session_state.active_kegiatan = None
+        st.session_state.selected_peserta = None
         st.rerun()
 
 # ==========================================
@@ -350,7 +330,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN (HTML INLINE NATIVE PERMANEN)
+# 4. DETAIL KEGIATAN & PRESENSI (100% BLOK WARNA + RAPAT DI HP)
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -360,6 +340,7 @@ else:
     with col_b1:
         if st.button("⬅️ Kembali"):
             st.session_state.active_kegiatan = None
+            st.session_state.selected_peserta = None
             if "pilih_beda" in st.session_state:
                 del st.session_state.pilih_beda
             load_home_data()
@@ -394,36 +375,134 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # LOOP KARTU NAMA PAKAI ST.COLUMNS RAPAT + HTML INLINE MENYALA (100% GARANSI)
+    # RENDER BARIS PESERTA DENGAN WARNA WARNI 100% MENYALA
     for p in filtered:
-        no_p = p['no']
+        is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
         kumpul = p.get("kumpul")
+        no_p = p['no']
         
-        # Penentuan Warna HTML Inline
+        # Penentuan Kelas CSS Warna
         if K.get("status") == "DITUTUP" and not hadir:
-            bg_c, text_c, border_c = "#FF0000", "#FFFFFF", "#B30000"
+            card_cls = "card-merah"
         elif kumpul:
-            bg_c, text_c, border_c = "#92D050", "#000000", "#6A9E32"
+            card_cls = "card-ijo"
         elif hadir:
-            bg_c, text_c, border_c = "#F4F207", "#000000", "#C4C200"
+            card_cls = "card-kuning"
         else:
-            bg_c, text_c, border_c = "#262730", "#FFFFFF", "#444444"
+            card_cls = "card-putih"
 
-        # RENDER BLOK WARNA HTML MURNI (WARNA DIJAMIN MENYALA NATIVE DI HP)
-        col_c1, col_c2 = st.columns([85, 15])
-        with col_c1:
-            st.markdown(f"""
-            <div style="background-color:{bg_c}; color:{text_c}; border:1.5px solid {border_c}; 
-                        padding:7px 10px; border-radius:6px; font-weight:bold; font-size:0.88rem;
-                        box-shadow:0 1px 2px rgba(0,0,0,0.2);">
-                {no_p}. {p['nama']} ({p['rm']})
-            </div>
-            """, unsafe_allow_html=True)
-        with col_c2:
-            # TOMBOL UNTUK MEMBUKA POP-UP MODAL
-            if st.button("📋", key=f"btn_pop_{no_p}", use_container_width=True):
-                popup_detail_peserta(p, K)
+        # Label Murni: No + Nama Lengkap (No RM Dibuang)
+        btn_label = f"{no_p}. {p['nama']}"
+        is_selected = (st.session_state.selected_peserta == no_p)
+
+        # 1. TOMBOL NAMA PESERTA UTAMA (WARNA WARNI NATIVE STREAMLIT)
+        # Menempelkan class warna langsung ke button HTML Streamlit
+        btn_clicked = st.button(btn_label, key=f"btn_card_{no_p}")
+        
+        # Inject Class CSS khusus untuk tombol ini
+        st.markdown(f"""
+        <script>
+        var btn = window.parent.document.querySelector('button[key="btn_card_{no_p}"]');
+        if(btn) {{
+            btn.className = 'st-emotion-cache-190q069 {card_cls}';
+        }}
+        </script>
+        """, unsafe_allow_html=True)
+
+        if btn_clicked:
+            if is_selected:
+                st.session_state.selected_peserta = None
+            else:
+                st.session_state.selected_peserta = no_p
+            st.rerun()
+
+        # 2. DETAIL PANEL YANG MEKAR SAAT NAMA DIKLIK
+        if is_selected:
+            with st.container():
+                st.markdown('<div class="detail-panel">', unsafe_allow_html=True)
+                st.write(f"**No RM:** {p.get('rm')} | **NIK:** {p.get('nik', '-')}")
+                st.write(f"**Tgl Lahir:** {format_tgl(p.get('tgl'))} | **Usia:** {p.get('usia', '-')} thn | **JK:** {p.get('jk')}")
+                
+                err_nik = analisa_nik_vs_tgl(p.get('nik'), p.get('tgl'), p.get('jk'))
+                if err_nik:
+                    st.error(err_nik)
+
+                if p.get("haid"):
+                    st.info(f"Keterangan Tambahan: **{p['haid']}**")
+                if p.get("cek"):
+                    st.error(f"Perlu dicek dengan KTP: {p['cek']}")
+
+                if is_draft:
+                    col_act1, col_act2, col_act3 = st.columns([2, 2, 1])
+                    with col_act1:
+                        if not hadir:
+                            haid_final_val = ""
+                            jk_val = str(p.get("jk", "")).upper()
+                            
+                            if jk_val in ["P", "PEREMPUAN"]:
+                                opt_h = st.radio("Status Khusus", ["Tidak ada", "HAID", "HAMIL"], key=f"rad_h_{no_p}")
+                                if opt_h == "HAID":
+                                    hari_h = st.selectbox("Hari Ke-", ["1", "2", "3", "4", "5", "6", "7", "Lainnya"], key=f"sel_h_{no_p}")
+                                    if hari_h == "Lainnya":
+                                        custom_h = st.text_input("Hari keberapa?", key=f"txt_h_{no_p}").strip()
+                                        haid_final_val = f"HAID+{custom_h}" if custom_h else "HAID"
+                                    else:
+                                        haid_final_val = f"HAID+{hari_h}"
+                                elif opt_h == "HAMIL":
+                                    haid_final_val = "HAMIL"
+
+                            # KLIK SET HADIR -> KARTU AUTOMATIS LANGSUNG CLOSED!
+                            if st.button("Set Hadir", key=f"btn_h_{no_p}", type="primary"):
+                                res_p = run_apps_script("setHadir", K["id"], no_p, haid_final_val)
+                                p.update(res_p)
+                                st.session_state.selected_peserta = None # AUTO CLOSE KARTU
+                                st.rerun()
+
+                    with col_act2:
+                        if hadir and not kumpul:
+                            # KLIK BERKAS -> KARTU AUTOMATIS LANGSUNG CLOSED!
+                            if st.button("Berkas Terkumpul", key=f"btn_k_{no_p}"):
+                                res_p = run_apps_script("setKumpul", K["id"], no_p)
+                                p.update(res_p)
+                                st.session_state.selected_peserta = None # AUTO CLOSE KARTU
+                                st.rerun()
+
+                    with col_act3:
+                        if st.button("✏️ Edit", key=f"btn_edit_{no_p}"):
+                            st.session_state[f"edit_mode_{no_p}"] = True
+
+                if st.session_state.get(f"edit_mode_{no_p}", False):
+                    with st.form(key=f"form_edit_{no_p}"):
+                        st.subheader(f"Edit Data No. {no_p}")
+                        e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
+                        e_rm = st.text_input("No RM", value=p.get("rm", ""))
+                        e_nik = st.text_input("NIK", value=str(p.get("nik", "")))
+                        e_tgl = st.text_input("Tgl Lahir (YYYY-MM-DD)", value=str(p.get("tgl", "")))
+                        e_jk = st.selectbox("Jenis Kelamin", ["L", "P"], index=0 if str(p.get("jk","")).upper().startswith("L") else 1)
+                        
+                        c_save, c_canc = st.columns(2)
+                        with c_save:
+                            if st.form_submit_button("💾 Simpan"):
+                                data_update = {
+                                    "nama": e_nama,
+                                    "rm": e_rm,
+                                    "nik": e_nik,
+                                    "tgl": e_tgl,
+                                    "jk": e_jk
+                                }
+                                res_upd = run_apps_script("simpanPeserta", K["id"], no_p, data_update)
+                                p.update(res_upd)
+                                st.session_state[f"edit_mode_{no_p}"] = False
+                                st.session_state.selected_peserta = None # AUTO CLOSE
+                                st.success("Tersimpan!")
+                                st.rerun()
+                        with c_canc:
+                            if st.form_submit_button("Batal"):
+                                st.session_state[f"edit_mode_{no_p}"] = False
+                                st.rerun()
+
+                st.markdown('</div>', unsafe_allow_html=True)
 
     # TAMBAH MANUAL PESERTA
     if K.get("status") == "DRAFT":
