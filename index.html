@@ -67,27 +67,36 @@
             margin-bottom: 10px;
             font-size: 0.85rem;
         }
+        
+        /* BLOK WARNA BACKGROUND CARD PESERTA */
         .participant-item {
-            background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 6px;
             margin-bottom: 6px;
-            padding: 8px 12px;
+            padding: 10px 12px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: space-between;
             font-weight: bold;
             font-size: 0.9rem;
+            color: #000; /* Teks di dalam card blok warna jadi gelap agar kontras & jelas */
         }
+        .card-red { background-color: var(--red); }
+        .card-yellow { background-color: var(--yellow); }
+        .card-green { background-color: var(--green); }
+        .card-white { background-color: #e0e0e0; }
+
         .details-box {
             display: none;
-            background: #252525;
+            background: #1a1a1a;
+            color: #fff;
             padding: 10px;
             border-radius: 6px;
-            margin-top: 5px;
+            margin-top: -3px;
             margin-bottom: 8px;
             font-size: 0.85rem;
+            border: 1px solid var(--border-color);
             border-left: 3px solid var(--primary-color);
         }
         .details-box.active {
@@ -173,6 +182,26 @@
             <div>Peserta: <span id="statTotal" style="font-weight:bold;">0</span></div>
             <div style="color:var(--yellow);">Hadir: <span id="statHadir" style="font-weight:bold;">0</span></div>
             <div style="color:var(--green);">Berkas: <span id="statKumpul" style="font-weight:bold;">0</span></div>
+        </div>
+
+        <!-- FORM TAMBAH PESERTA MANUAL -->
+        <div class="card" style="background:#181818; border-color:#444;">
+            <details>
+                <summary style="cursor:pointer; font-weight:bold; color:var(--text-color);">➕ Tambah Peserta Manual</summary>
+                <div style="margin-top:10px;">
+                    <label>Nama Lengkap</label>
+                    <input type="text" id="mNama" placeholder="Nama peserta...">
+                    <label>No RM</label>
+                    <input type="text" id="mRm" placeholder="Nomor RM...">
+                    <label>NIK (16 Digit)</label>
+                    <input type="text" id="mNik" placeholder="Nomor KTP/NIK...">
+                    <label>Tanggal Lahir</label>
+                    <input type="date" id="mTgl">
+                    <label>Jenis Kelamin</label>
+                    <select id="mJk"><option value="L">Laki-laki (L)</option><option value="P">Perempuan (P)</option></select>
+                    <button onclick="addManualParticipant()">Simpan Peserta Manual</button>
+                </div>
+            </details>
         </div>
 
         <div id="participantList"></div>
@@ -313,7 +342,6 @@
         handleLogin(true);
     }
 
-    // UPLOAD EXCEL MENGGUNAKAN SHEETJS DI BROWSER
     async function previewExcel() {
         let pt = document.getElementById("selectPt").value;
         let tgl = document.getElementById("inputTgl").value;
@@ -377,6 +405,30 @@
         appData.tempUploadPayload = null;
     }
 
+    async function addManualParticipant() {
+        let K = appData.activeKegiatan;
+        let nama = document.getElementById("mNama").value.trim();
+        let rm = document.getElementById("mRm").value.trim();
+        let nik = document.getElementById("mNik").value.trim();
+        let tgl = document.getElementById("mTgl").value;
+        let jk = document.getElementById("mJk").value;
+
+        if (!nama || !rm) {
+            alert("Nama dan No RM wajib diisi!");
+            return;
+        }
+
+        let newData = { nama: nama, rm: rm, nik: nik, tgl: tgl, jk: jk, status: "BELUM" };
+        let resNew = await callBackend("tambahPeserta", [K.id, newData]);
+        K.rows.push(resNew);
+        
+        document.getElementById("mNama").value = "";
+        document.getElementById("mRm").value = "";
+        document.getElementById("mNik").value = "";
+        renderDetailKegiatan();
+        alert(`${nama} berhasil ditambahkan!`);
+    }
+
     function renderDetailKegiatan() {
         let K = appData.activeKegiatan;
         let isClosed = K.status === 'DITUTUP';
@@ -405,7 +457,7 @@
         filterParticipants();
     }
 
-    // LIVE SEARCH INSTAN
+    // LIVE SEARCH INSTAN DENGAN BLOK WARNA BACKGROUND CARD
     function filterParticipants() {
         let K = appData.activeKegiatan;
         if (!K) return;
@@ -417,14 +469,23 @@
             let match = !q || p.no.toString() === q || p.nama.toUpperCase().includes(q) || p.rm.toUpperCase().includes(q) || (p.nik && p.nik.toString().includes(q));
             if (!match) return;
 
-            let icon = "⚪";
-            if (K.status === "DITUTUP" && !p.hadir) icon = "🔴";
-            else if (p.kumpul) icon = "🟢";
-            else if (p.hadir) icon = "🟡";
+            // Tentukan warna blok background card sesuai status
+            let cardColorClass = "card-white";
+            let statusIcon = "⚪";
+            if (K.status === "DITUTUP" && !p.hadir) {
+                cardColorClass = "card-red";
+                statusIcon = "🔴";
+            } else if (p.kumpul) {
+                cardColorClass = "card-green";
+                statusIcon = "🟢";
+            } else if (p.hadir) {
+                cardColorClass = "card-yellow";
+                statusIcon = "🟡";
+            }
 
             let item = document.createElement("div");
-            item.className = "participant-item";
-            item.innerHTML = `<span>${p.no}. ${icon} ${p.nama}</span> <span>▼</span>`;
+            item.className = `participant-item ${cardColorClass}`;
+            item.innerHTML = `<span>${p.no}. ${statusIcon} ${p.nama}</span> <span>▼</span>`;
             item.onclick = () => {
                 let box = item.nextElementSibling;
                 box.classList.toggle("active");
