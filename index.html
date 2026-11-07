@@ -112,7 +112,7 @@
             <button onclick="previewExcel()">Periksa File Excel (Kilat)</button>
         </div>
 
-        <!-- PREVIEW & TOMBOL INTERAKTIF KONFIRMASI DUPLIKAT -->
+        <!-- PREVIEW & KONFIRMASI DUPLIKAT -->
         <div id="previewSection" class="card hidden" style="border: 2px solid var(--yellow);">
             <h4 style="color:var(--yellow); margin-top:0;">📊 Hasil Pemeriksaan File</h4>
             <div id="previewInfo" style="margin-bottom: 8px;"></div>
@@ -160,6 +160,9 @@
             <div style="color:var(--green);">Berkas: <span id="statKumpul" style="font-weight:bold;">0</span></div>
         </div>
 
+        <!-- TOMBOL EXPORT EXCEL LANGSUNG (TANPA CLOSE) -->
+        <button onclick="exportToExcel()" style="background:var(--green); color:#000; margin-bottom: 10px;">📥 Unduh File Excel (.xlsx)</button>
+
         <!-- FORM TAMBAH PESERTA MANUAL -->
         <div class="card" style="background:#181818; border-color:#444;">
             <details>
@@ -204,7 +207,7 @@
     </div>
 </div>
 
-<!-- SheetJS untuk membaca file Excel secepat kilat di browser -->
+<!-- SheetJS untuk Excel Processing -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
     let appData = {
@@ -320,7 +323,6 @@
         handleLogin(true);
     }
 
-    // UPLOAD EXCEL SUPER KILAT & CEK DUPLIKAT INTERAKTIF
     async function previewExcel() {
         let pt = document.getElementById("selectPt").value;
         let tgl = document.getElementById("inputTgl").value;
@@ -350,7 +352,6 @@
                     }
                 });
 
-                // Kirim ke backend untuk di-preview
                 let res = await callBackend("previewUpload", [pt, tgl, payloadSheets]);
                 appData.tempUploadPayload = { kode: pt, tgl: tgl, payload: payloadSheets };
 
@@ -383,7 +384,6 @@
         let up = appData.tempUploadPayload;
         let action = document.getElementById("conflictAction").value;
         
-        // Kirim opsi tindakan duplikat ke backend
         let s = await callBackend("simpanUpload", [up.kode, up.tgl, up.payload, action]);
         appData.activeKegiatan = await callBackend("getKegiatan", [s.keg]);
         
@@ -448,6 +448,61 @@
         }
 
         filterParticipants();
+    }
+
+    // EXPORT EXCEL LANGSUNG DI BROWSER TANPA CLOSE MCU
+    function exportToExcel() {
+        let K = appData.activeKegiatan;
+        if (!K || !K.rows) return;
+
+        let wb = XLSX.utils.book_new();
+
+        // Siapkan data untuk sheet Pendaftaran / Semua Peserta
+        let dataPendaftaran = K.rows.map(p => ({
+            "NO": p.no,
+            "NO RM": p.rm,
+            "NAMA": p.nama,
+            "JK": p.jk,
+            "TANGGAL LAHIR": p.tgl,
+            "USIA": p.usia || "",
+            "NO KTP": p.nik || "",
+            "HAID/HAMIL": p.haid || "",
+            "STATUS HADIR": p.hadir ? "HADIR" : "BELUM"
+        }));
+
+        let wsPendaftaran = XLSX.utils.json_to_sheet(dataPendaftaran);
+        XLSX.utils.book_append_sheet(wb, wsPendaftaran, "PENDAFTARAN");
+
+        // Sheet Hadir Saja
+        let dataHadir = K.rows.filter(p => p.hadir).map(p => ({
+            "NO": p.no,
+            "NO RM": p.rm,
+            "NAMA": p.nama,
+            "JK": p.jk,
+            "TANGGAL LAHIR": p.tgl,
+            "USIA": p.usia || "",
+            "NO KTP": p.nik || "",
+            "HAID/HAMIL": p.haid || ""
+        }));
+        let wsHadir = XLSX.utils.json_to_sheet(dataHadir);
+        XLSX.utils.book_append_sheet(wb, wsHadir, "HADIR");
+
+        // Sheet Tidak Hadir Saja
+        let dataTidakHadir = K.rows.filter(p => !p.hadir).map(p => ({
+            "NO": p.no,
+            "NO RM": p.rm,
+            "NAMA": p.nama,
+            "JK": p.jk,
+            "TANGGAL LAHIR": p.tgl,
+            "USIA": p.usia || "",
+            "NO KTP": p.nik || ""
+        }));
+        let wsTidakHadir = XLSX.utils.json_to_sheet(dataTidakHadir);
+        XLSX.utils.book_append_sheet(wb, wsTidakHadir, "TIDAK HADIR");
+
+        // Download file .xlsx
+        let fileName = `MCU_${K.kode}_${K.tgl}.xlsx`;
+        XLSX.writeFile(wb, fileName);
     }
 
     // LIVE SEARCH INSTAN DENGAN FULL BLOK WARNA BACKGROUND CARD
