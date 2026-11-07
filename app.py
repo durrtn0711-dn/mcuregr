@@ -12,45 +12,24 @@ st.set_page_config(page_title="MCU Registrasi", page_icon="🏥", layout="center
 
 DEFAULT_URL = "https://script.google.com/macros/s/AKfycbxvKfpvDrlunxxrDcV2VvOKBFzDxDprL8mFvsucx0PgM6-lnSRDE5TRKSjOemSG85HwNw/exec"
 
-# --- CSS PEMICU RAPAT TOTAL (MEMANGKAS SEMUA JARAK / SPASI KOSONG) ---
+# --- CSS SPASI NORMAL, RAPI, DAN TIDAK TUMPANG TINDIH ---
 st.markdown("""
 <style>
-/* Reset Padding Utama Layar HP */
+/* Padding Layar Normal di Atas */
 .block-container {
-    padding-top: 0.2rem !important;
-    padding-bottom: 0.5rem !important;
-    padding-left: 0.15rem !important;
-    padding-right: 0.15rem !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
 }
 
-/* Rapatkan Semua Vertical Block dan Element Container */
-div[data-testid="stVerticalBlock"] {
-    gap: 0.15rem !important;
-}
-div[data-testid="stVerticalBlock"] > div {
-    gap: 0.1rem !important;
-    margin-bottom: 0px !important;
-}
-.element-container {
-    margin-bottom: 0.1rem !important;
-}
-
-/* Rapatkan Judul & Header */
+/* Spasi Header & Form Normal */
 h1, h2, h3, h4 {
-    margin-top: 0.1rem !important;
-    margin-bottom: 0.1rem !important;
-    padding: 0px !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
 }
-
-/* Rapatkan Input Form, Selectbox, Date, Uploader */
 div[data-testid="stSelectbox"], div[data-testid="stDateInput"], div[data-testid="stFileUploader"], div[data-testid="stTextInput"] {
-    margin-bottom: 0.15rem !important;
-}
-
-/* Rapatkan Garis Pembatas (Divider) */
-hr {
-    margin-top: 0.3rem !important;
-    margin-bottom: 0.3rem !important;
+    margin-bottom: 0.8rem !important;
 }
 
 /* Badge Statistik Sejajar */
@@ -58,11 +37,11 @@ hr {
     background-color: #1e1e1e;
     border: 1px solid #333;
     border-radius: 6px;
-    padding: 4px 8px;
+    padding: 6px 10px;
     display: flex;
     justify-content: space-around;
     align-items: center;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
     font-size: 0.85rem;
     color: #ffffff;
 }
@@ -71,35 +50,35 @@ hr {
     font-size: 1.05rem;
 }
 
-/* Padatkan Expander Peserta */
+/* Expander Peserta Rapi & Tidak Bertumpuk */
 div[data-testid="stExpander"] {
     border: 1px solid #444 !important;
     border-radius: 6px !important;
-    margin-bottom: 2px !important;
+    margin-bottom: 6px !important;
 }
 div[data-testid="stExpander"] details {
     padding: 0px !important;
 }
 div[data-testid="stExpander"] summary {
-    padding: 6px 8px !important;
-    font-size: 0.88rem !important;
+    padding: 8px 10px !important;
+    font-size: 0.9rem !important;
     font-weight: bold !important;
 }
 div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
-    padding: 2px 6px 6px 6px !important;
-    gap: 0.05rem !important;
+    padding: 8px 10px 10px 10px !important;
+    gap: 0.4rem !important;
 }
 
-/* Radio Button Horizontal */
+/* Radio Button Horizontal Rapi */
 div[data-testid="stRadio"] > div {
     display: flex !important;
     flex-direction: row !important;
     gap: 15px !important;
 }
 
-div[data-testid="stExpander"] p {
-    font-size: 0.82rem !important;
-    margin-bottom: 2px !important;
+/* Pastikan Teks di dalam Expander Jaraknya Pas & Tidak Tumpang Tindih */
+div[data-testid="stExpander"] p, div[data-testid="stExpander"] span, div[data-testid="stExpander"] div {
+    line-height: 1.4 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -328,7 +307,7 @@ if st.session_state.active_kegiatan is None:
             st.rerun()
 
 # ==========================================
-# 4. DETAIL KEGIATAN & PRESENSI (SUPER PADAT & RAPAT)
+# 4. DETAIL KEGIATAN & PRESENSI
 # ==========================================
 else:
     K = st.session_state.active_kegiatan
@@ -372,7 +351,7 @@ else:
                   q in str(p.get("nik", ""))):
                 filtered.append(p)
 
-    # RENDER BARIS NAMA PESERTA DENGAN EXPANDER SUPER PADAT
+    # RENDER BARIS NAMA PESERTA DENGAN EXPANDER
     for p in filtered:
         is_draft = K.get("status") == "DRAFT"
         hadir = p.get("hadir")
@@ -429,7 +408,7 @@ else:
                         run_apps_script("setKumpul", K["id"], no_p)
                         st.rerun()
 
-            # FORM EDIT DIPADATKAN
+            # FORM EDIT
             with st.expander("✏️ Edit Data"):
                 with st.form(key=f"form_exp_edit_{no_p}"):
                     e_nama = st.text_input("Nama Peserta", value=p.get("nama", ""))
