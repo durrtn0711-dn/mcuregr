@@ -70,6 +70,16 @@
         .details-box.active { display: block; }
         .radio-group { display: flex; gap: 15px; margin: 8px 0; font-size: 0.85rem; color: #fff; }
         .hidden { display: none !important; }
+        .btn-row { display: flex; gap: 8px; }
+        .btn-row button { flex: 1; }
+        .btn-edit { background-color: var(--blue) !important; color: #fff; }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 900; overflow-y: auto;
+            display: flex; justify-content: center; align-items: flex-start; padding: 10px; box-sizing: border-box;
+        }
+        .modal-box { width: 100%; max-width: 480px; margin-top: 20px; }
+        .modal-box label { font-size: 0.85rem; color: #ccc; }
         .loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
@@ -82,6 +92,43 @@
 <div id="loading" class="loading-overlay hidden">
     <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
     <div id="loadingText">Memproses Server...</div>
+</div>
+
+<!-- FORM EDIT PESERTA -->
+<div id="editModal" class="modal-overlay hidden">
+    <div class="card modal-box">
+        <h3>✏️ Edit Peserta <small id="editNoInfo" style="font-weight:normal;color:#888;"></small></h3>
+        <label>Nama</label>
+        <input type="text" id="editNama">
+        <label>NIK</label>
+        <input type="text" id="editNik" inputmode="numeric">
+        <label>Tanggal Lahir</label>
+        <input type="date" id="editTgl" onchange="hitungUsiaEdit()">
+        <label>Usia (otomatis dari tanggal lahir)</label>
+        <input type="text" id="editUsia" readonly style="background:#1a1a1a;color:#aaa;">
+        <label>Kehadiran</label>
+        <select id="editStatus">
+            <option value="HADIR">Hadir</option>
+            <option value="BELUM">Tidak hadir</option>
+        </select>
+        <div id="editHaidWrap">
+            <label>Haid / Hamil</label>
+            <select id="editHaid" onchange="onEditHaidChange()">
+                <option value="">Tidak ada</option>
+                <option value="HAID">HAID</option>
+                <option value="HAMIL">HAMIL</option>
+            </select>
+            <select id="editHaidHari" class="hidden">
+                <option value="1">Hari Ke-1</option><option value="2">Hari Ke-2</option><option value="3">Hari Ke-3</option>
+                <option value="4">Hari Ke-4</option><option value="5">Hari Ke-5</option><option value="6">Hari Ke-6</option><option value="7">Hari Ke-7</option><option value="Lainnya">Lainnya</option>
+            </select>
+            <input type="text" id="editHaidTxt" class="hidden" placeholder="Ketik hari keberapa...">
+        </div>
+        <div class="btn-row">
+            <button class="secondary" onclick="closeEdit()">Batal</button>
+            <button onclick="saveEdit()" style="background:var(--green); color:#000;">💾 Simpan</button>
+        </div>
+    </div>
 </div>
 
 <div class="container">
@@ -664,6 +711,7 @@
                               `<b>Tgl Lahir:</b> ${p.tgl} | <b>Usia:</b> ${p.usia || '-'}thn | <b>JK:</b> ${p.jk}<br>`;
             if (p.haid) htmlDetails += `<span style="color:var(--yellow);"><b>Ket:</b> ${fmtHaid(p.haid)}</span><br>`;
             
+            let editBtn = `<button class="btn-edit" onclick="openEdit(${p.no})">✏️ Edit</button>`;
             if (K.status === "DRAFT") {
                 if (!p.hadir) {
                     let isP = String(p.jk).toUpperCase().includes("P");
@@ -680,11 +728,12 @@
                                        `</select>` +
                                        `<input type="text" id="haid_txt_${p.no}" class="hidden" placeholder="Ketik hari keberapa...">`;
                     }
-                    htmlDetails += `<button onclick="setHadir(${p.no})">✅ Set Hadir</button>`;
+                    htmlDetails += `<div class="btn-row"><button onclick="setHadir(${p.no})">✅ Set Hadir</button>${editBtn}</div>`;
                 } else if (p.hadir && !p.kumpul) {
-                    htmlDetails += `<button onclick="setKumpul(${p.no})" style="background:var(--green); color:#000;">📁 Berkas Terkumpul</button>`;
+                    htmlDetails += `<hr style="border-color:#444; margin:5px 0;"><div class="btn-row"><button onclick="setKumpul(${p.no})" style="background:var(--green); color:#000;">📁 Berkas Terkumpul</button>${editBtn}</div>`;
                 }
             }
+            if (K.status === "DRAFT" && p.kumpul) htmlDetails += `<hr style="border-color:#444; margin:5px 0;"><div class="btn-row">${editBtn}</div>`;
             details.innerHTML = htmlDetails;
 
             listDiv.appendChild(item);
@@ -739,6 +788,125 @@
         }
         let res = await callBackend("setHadir", [K.id, no, val]);
         Object.assign(p, res);
+        renderDetailKegiatan();
+    }
+
+    // ===== EDIT PESERTA =====
+    let editNoAktif = null;
+
+    function hitungUsia(tgl) {
+        if (!tgl) return "";
+        let a = tgl.split("-").map(Number), n = new Date();
+        let u = n.getFullYear() - a[0];
+        if (n.getMonth() + 1 < a[1] || (n.getMonth() + 1 === a[1] && n.getDate() < a[2])) u--;
+        return isNaN(u) ? "" : u;
+    }
+
+    function hitungUsiaEdit() {
+        document.getElementById("editUsia").value = hitungUsia(document.getElementById("editTgl").value);
+    }
+
+    function onEditHaidChange() {
+        let st = document.getElementById("editHaid").value;
+        let hari = document.getElementById("editHaidHari");
+        let txt = document.getElementById("editHaidTxt");
+        hari.classList.toggle("hidden", st !== "HAID");
+        txt.classList.toggle("hidden", !(st === "HAID" && hari.value === "Lainnya"));
+        hari.onchange = onEditHaidChange;
+    }
+
+    function openEdit(no) {
+        let K = appData.activeKegiatan;
+        let p = K.rows.find(x => x.no === no);
+        if (!p) return;
+        editNoAktif = no;
+        document.getElementById("editNoInfo").textContent = `(No. ${p.no})`;
+        document.getElementById("editNama").value = p.nama || "";
+        document.getElementById("editNik").value = p.nik || "";
+        document.getElementById("editTgl").value = p.tgl || "";
+        hitungUsiaEdit();
+        document.getElementById("editStatus").value = p.hadir ? "HADIR" : "BELUM";
+
+        let isP = String(p.jk).toUpperCase().includes("P");
+        document.getElementById("editHaidWrap").classList.toggle("hidden", !isP);
+
+        // isi haid/hamil dari data yang ada
+        let selHaid = document.getElementById("editHaid");
+        let selHari = document.getElementById("editHaidHari");
+        let txt = document.getElementById("editHaidTxt");
+        Array.from(selHaid.querySelectorAll("option[data-lama]")).forEach(o => o.remove());
+        selHaid.value = ""; selHari.value = "1"; txt.value = "";
+        let raw = String(p.haid || "").trim();
+        let up = raw.toUpperCase();
+        let m = up.match(/^HAID\s*\+\s*(.+)$/);
+        if (m) {
+            selHaid.value = "HAID";
+            let h = m[1].trim();
+            if (["1","2","3","4","5","6","7"].includes(h)) { selHari.value = h; }
+            else { selHari.value = "Lainnya"; txt.value = h; }
+        } else if (up === "HAID") {
+            selHaid.value = "HAID"; selHari.value = "Lainnya"; txt.value = "";
+        } else if (up === "HAMIL") {
+            selHaid.value = "HAMIL";
+        } else if (raw) {
+            let o = document.createElement("option");
+            o.value = "LAMA"; o.textContent = "Tetap: " + raw; o.setAttribute("data-lama", "1");
+            selHaid.appendChild(o);
+            selHaid.value = "LAMA";
+        }
+        onEditHaidChange();
+        document.getElementById("editModal").classList.remove("hidden");
+    }
+
+    function closeEdit() {
+        document.getElementById("editModal").classList.add("hidden");
+        editNoAktif = null;
+    }
+
+    async function saveEdit() {
+        let K = appData.activeKegiatan;
+        let p = K.rows.find(x => x.no === editNoAktif);
+        if (!p) return;
+        let nama = document.getElementById("editNama").value.trim();
+        if (!nama) { alert("Nama wajib diisi."); return; }
+
+        let hadirBaru = document.getElementById("editStatus").value === "HADIR";
+        if (!hadirBaru && p.kumpul) {
+            if (!confirm("Peserta ini sudah tercatat berkas terkumpul. Kalau diubah ke Tidak hadir, catatan terkumpul juga ikut terhapus. Lanjut?")) return;
+        }
+        let status = !hadirBaru ? "BELUM" : (p.kumpul ? "KUMPUL" : "HADIR");
+
+        let isP = String(p.jk).toUpperCase().includes("P");
+        let haid = "";
+        if (isP) {
+            let st = document.getElementById("editHaid").value;
+            if (st === "HAID") {
+                let hari = document.getElementById("editHaidHari").value;
+                if (hari === "Lainnya") {
+                    let c = document.getElementById("editHaidTxt").value.trim();
+                    haid = c ? `HAID+${c}` : "HAID";
+                } else {
+                    haid = `HAID+${hari}`;
+                }
+            } else if (st === "HAMIL") {
+                haid = "HAMIL";
+            } else if (st === "LAMA") {
+                haid = p.haid || "";
+            }
+        }
+
+        let d = {
+            nama: nama,
+            jk: (p.jk === "L" || p.jk === "P") ? p.jk : "",
+            tgl: document.getElementById("editTgl").value,
+            nik: document.getElementById("editNik").value.replace(/\D/g, ""),
+            hp: p.hp, jenis: p.jenis, urut: p.urut, bagian: p.bagian,
+            jabatan: p.jabatan, tempat: p.tempat,
+            haid: haid, status: status
+        };
+        let res = await callBackend("simpanPeserta", [K.id, Number(p.no), d]);
+        Object.assign(p, res);
+        closeEdit();
         renderDetailKegiatan();
     }
 
