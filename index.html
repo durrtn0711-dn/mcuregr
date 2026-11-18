@@ -200,7 +200,7 @@
             <h4 id="detailTitle" style="margin:0;"></h4>
         </div>
 
-        <input type="text" id="searchBox" placeholder="🔍 Ketik nama, no TTD, RM, NIK instan..." oninput="filterParticipants()">
+        <input type="text" id="searchBox" placeholder="🔍 Ketik nama atau no TTD..." oninput="filterParticipants()">
 
         <div class="stat-box">
             <div>Peserta: <span id="statTotal" style="font-weight:bold;">0</span></div>
@@ -710,7 +710,7 @@
         listDiv.innerHTML = "";
 
         K.rows.forEach(p => {
-            let match = !q || p.no.toString() === q || p.nama.toUpperCase().includes(q) || p.rm.toUpperCase().includes(q) || (p.nik && p.nik.toString().includes(q));
+            let match = !q || p.no.toString() === q || p.nama.toUpperCase().includes(q);
             if (!match) return;
 
             let cardColorClass = "card-white";
