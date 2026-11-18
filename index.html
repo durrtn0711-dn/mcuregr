@@ -200,7 +200,7 @@
             <h4 id="detailTitle" style="margin:0;"></h4>
         </div>
 
-        <input type="text" id="searchBox" placeholder="🔍 Ketik nama, RM, NIK instan..." oninput="filterParticipants()">
+        <input type="text" id="searchBox" placeholder="🔍 Ketik nama, no TTD, RM, NIK instan..." oninput="filterParticipants()">
 
         <div class="stat-box">
             <div>Peserta: <span id="statTotal" style="font-weight:bold;">0</span></div>
@@ -289,7 +289,7 @@
         el.classList.toggle("hidden", !show);
     }
 
-    async function callBackend(fn, args = []) {
+    async function callBackend(fn, args = [], senyap = false) {
         showLoading(true, "Menghubungkan ke Server...");
         try {
             let res = await fetch(appData.url, {
@@ -302,7 +302,7 @@
             return json.data;
         } catch (err) {
             showLoading(false);
-            alert("Error: " + err.message);
+            if (!senyap) alert("Error: " + err.message);
             throw err;
         }
     }
@@ -380,6 +380,36 @@
         handleLogin(true);
     }
 
+    // Membaca file Excel dari input. Kalau hasilnya kosong (sering terjadi di HP saat file
+    // baru dipilih dari WhatsApp/Drive), file dibaca ulang otomatis oleh previewExcel.
+    async function bacaFileExcel(file) {
+        let skipRegex = /^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$/i;
+        let buf = file.arrayBuffer ? await file.arrayBuffer() : await new Promise((ok, gagal) => {
+            let r = new FileReader();
+            r.onload = e => ok(e.target.result);
+            r.onerror = () => gagal(new Error("FILE_KOSONG"));
+            r.readAsArrayBuffer(file);
+        });
+        if (!buf || buf.byteLength === 0) throw new Error("FILE_KOSONG");
+        let workbook = XLSX.read(new Uint8Array(buf), { type: 'array' });
+        let payloadSheets = [], rawSheets = [], totalBaris = 0;
+        workbook.SheetNames.forEach(sheetName => {
+            if (!skipRegex.test(sheetName)) {
+                let ws = workbook.Sheets[sheetName];
+                let rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+                totalBaris += rows.length;
+                rawSheets.push({ name: sheetName, rows: rows });
+                payloadSheets.push({ name: sheetName, rows: rows.map(r => r.slice(0, 40)) });
+            }
+        });
+        if (totalBaris === 0) throw new Error("FILE_KOSONG");
+        return { payloadSheets, rawSheets };
+    }
+
+    function bolehUlang(msg) {
+        return /FILE_KOSONG|Judul kolom|fetch|network|Load failed|JSON|Unexpected|timeout/i.test(msg || "");
+    }
+
     async function previewExcel() {
         let pt = document.getElementById("selectPt").value;
         let tgl = document.getElementById("inputTgl").value;
@@ -391,28 +421,25 @@
 
         showLoading(true, "Membaca file Excel secepat kilat...");
         let file = fileInput.files[0];
-        let reader = new FileReader();
-        
-        reader.onload = async function(e) {
-            try {
-                let data = new Uint8Array(e.target.result);
-                let workbook = XLSX.read(data, { type: 'array' });
-                let payloadSheets = [];
-                let rawSheets = [];
-                let skipRegex = /^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$/i;
-
-                workbook.SheetNames.forEach(sheetName => {
-                    if (!skipRegex.test(sheetName)) {
-                        let ws = workbook.Sheets[sheetName];
-                        let rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-                        rawSheets.push({ name: sheetName, rows: rows });
-                        let trimmedRows = rows.map(r => r.slice(0, 40));
-                        payloadSheets.push({ name: sheetName, rows: trimmedRows });
+        try {
+            // Coba sampai 3 kali (file dibaca ulang tiap percobaan), jadi tidak perlu upload ulang manual
+            let res = null, data = null, lastErr = null;
+            for (let t = 0; t < 3; t++) {
+                try {
+                    if (t > 0) {
+                        showLoading(true, `Mencoba membaca ulang (${t}/2)...`);
+                        await new Promise(r => setTimeout(r, 1200));
                     }
-                });
-
-                let res = await callBackend("previewUpload", [pt, tgl, payloadSheets]);
-                appData.tempUploadPayload = { kode: pt, tgl: tgl, payload: payloadSheets, raw: rawSheets };
+                    data = await bacaFileExcel(file);
+                    res = await callBackend("previewUpload", [pt, tgl, data.payloadSheets], true);
+                    break;
+                } catch (e) {
+                    lastErr = e;
+                    if (!bolehUlang(e.message)) break;
+                }
+            }
+            if (!res) throw lastErr || new Error("Gagal membaca file.");
+            appData.tempUploadPayload = { kode: pt, tgl: tgl, payload: data.payloadSheets, raw: data.rawSheets };
 
                 document.getElementById("previewInfo").innerHTML = `<b>Total Ditemukan: ${res.total} Peserta</b> | Baru: ${res.baru}, Dilewati: ${res.lewat}`;
                 
@@ -430,12 +457,11 @@
                 }
 
                 document.getElementById("previewSection").classList.remove("hidden");
-            } catch (err) {
-                showLoading(false);
-                alert("Gagal membaca file Excel: " + err.message);
-            }
-        };
-        reader.readAsArrayBuffer(file);
+        } catch (err) {
+            showLoading(false);
+            let m = String(err.message || "");
+            alert("Gagal membaca file Excel: " + (m === "FILE_KOSONG" ? "isi file belum terbaca. Coba pilih file lagi." : m));
+        }
     }
 
     async function saveUpload() {
@@ -679,7 +705,7 @@
     function filterParticipants() {
         let K = appData.activeKegiatan;
         if (!K) return;
-        let q = document.getElementById("searchBox").value.toUpperCase();
+        let q = document.getElementById("searchBox").value.trim().toUpperCase();
         let listDiv = document.getElementById("participantList");
         listDiv.innerHTML = "";
 
