@@ -104,6 +104,8 @@
         <input type="text" id="editNik" inputmode="numeric">
         <label>No HP</label>
         <input type="tel" id="editHp">
+        <label>Tempat Lahir</label>
+        <input type="text" id="editTempat">
         <label>Tanggal Lahir</label>
         <input type="date" id="editTgl" onchange="hitungUsiaEdit()">
         <label>Usia (otomatis dari tanggal lahir)</label>
@@ -223,6 +225,8 @@
                     <input type="text" id="mNik" placeholder="Nomor KTP/NIK...">
                     <label>No HP</label>
                     <input type="tel" id="mHp" placeholder="Nomor HP...">
+                    <label>Tempat Lahir</label>
+                    <input type="text" id="mTempat" placeholder="Kota/kabupaten tempat lahir...">
                     <label>Tanggal Lahir</label>
                     <input type="date" id="mTgl">
                     <label>Jenis Kelamin</label>
@@ -386,16 +390,48 @@
 
     // Membaca file Excel dari input. Kalau hasilnya kosong (sering terjadi di HP saat file
     // baru dipilih dari WhatsApp/Drive), file dibaca ulang otomatis oleh previewExcel.
+    // Membaca isi file dengan 3 cara bergantian (file dari WA sering kosong di cara pertama)
+    async function bacaIsiFile(file) {
+        const cara = [
+            () => file.arrayBuffer ? file.arrayBuffer() : Promise.reject(new Error("x")),
+            () => new Promise((ok, gagal) => {
+                let r = new FileReader();
+                r.onload = e => ok(e.target.result);
+                r.onerror = () => gagal(new Error("x"));
+                r.readAsArrayBuffer(file);
+            }),
+            async () => {
+                let u = URL.createObjectURL(file);
+                try { return await (await fetch(u)).arrayBuffer(); } finally { URL.revokeObjectURL(u); }
+            }
+        ];
+        let terbaik = null;
+        for (const c of cara) {
+            try {
+                let buf = await c();
+                if (!buf || !buf.byteLength) continue;
+                if (!file.size || buf.byteLength === file.size) return buf; // utuh
+                if (!terbaik || buf.byteLength > terbaik.byteLength) terbaik = buf;
+            } catch (e) { /* coba cara berikutnya */ }
+        }
+        return terbaik;
+    }
+
+    function pesanFile(e, file) {
+        let m = String((e && e.message) || "");
+        let kb = file ? Math.round(file.size / 1024) : 0;
+        if (file && file.size === 0) return "File kosong (0 KB). Kemungkinan file dari WA belum selesai diunduh. Unduh dulu ke memori HP, lalu pilih ulang.";
+        if (m === "FILE_RUSAK") return "File bukan Excel yang valid atau diberi password. Coba buka lalu simpan ulang sebagai .xlsx.";
+        return `Isi file belum terbaca (ukuran file ${kb} KB). Unduh dulu ke memori HP, lalu pilih ulang.`;
+    }
+
     async function bacaFileExcel(file) {
         let skipRegex = /^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$/i;
-        let buf = file.arrayBuffer ? await file.arrayBuffer() : await new Promise((ok, gagal) => {
-            let r = new FileReader();
-            r.onload = e => ok(e.target.result);
-            r.onerror = () => gagal(new Error("FILE_KOSONG"));
-            r.readAsArrayBuffer(file);
-        });
-        if (!buf || buf.byteLength === 0) throw new Error("FILE_KOSONG");
-        let workbook = XLSX.read(new Uint8Array(buf), { type: 'array' });
+        let buf = await bacaIsiFile(file);
+        if (!buf) throw new Error("FILE_KOSONG");
+        let workbook;
+        try { workbook = XLSX.read(new Uint8Array(buf), { type: 'array' }); }
+        catch (x) { throw new Error(buf.byteLength === file.size ? "FILE_RUSAK" : "FILE_KOSONG"); }
         let payloadSheets = [], rawSheets = [], totalBaris = 0;
         workbook.SheetNames.forEach(sheetName => {
             if (!skipRegex.test(sheetName)) {
@@ -420,23 +456,31 @@
     // sudah "hilang" dari browser saat tombol Periksa ditekan.
     async function siapkanFile() {
         let st = document.getElementById("fileStatus");
-        let f = document.getElementById("inputExcel").files[0];
+        let input = document.getElementById("inputExcel");
+        let f = input.files[0];
         appData.fileCache = null;
         if (!f) { st.textContent = ""; return; }
-        st.style.color = "#aaa"; st.textContent = "⏳ Membaca file...";
-        let key = kunciFile(f);
-        for (let t = 0; t < 3; t++) {
+        let key = kunciFile(f), lastErr = null;
+        const jeda = [0, 1500, 3000, 6000];
+        for (let t = 0; t < jeda.length; t++) {
+            st.style.color = "#aaa";
+            st.textContent = t === 0 ? "⏳ Membaca file..." : `⏳ Membaca… coba ke-${t + 1}`;
+            if (jeda[t]) await new Promise(r => setTimeout(r, jeda[t]));
+            let f2 = input.files[0];
+            if (!f2 || kunciFile(f2) !== key) return; // file sudah diganti, hentikan
             try {
-                if (t > 0) await new Promise(r => setTimeout(r, 800));
-                let data = await bacaFileExcel(f);
+                let data = await bacaFileExcel(f2);
                 appData.fileCache = { key: key, data: data };
                 let n = data.payloadSheets.reduce((m, x) => m + x.rows.length, 0);
                 st.style.color = "var(--green)"; st.textContent = `✅ File siap dibaca (${n} baris)`;
                 return;
-            } catch (e) { /* coba lagi */ }
+            } catch (e) {
+                lastErr = e;
+                if (e.message === "FILE_RUSAK") break;
+            }
         }
         st.style.color = "var(--red, #ff6b6b)";
-        st.textContent = "❌ File tidak terbaca. Pilih ulang file-nya.";
+        st.textContent = "❌ " + pesanFile(lastErr, f);
     }
 
     async function previewExcel() {
@@ -491,7 +535,7 @@
         } catch (err) {
             showLoading(false);
             let m = String(err.message || "");
-            alert("Gagal membaca file Excel: " + (m === "FILE_KOSONG" ? "isi file belum terbaca. Pilih ulang file-nya lalu coba lagi." : m));
+            alert("Gagal membaca file Excel: " + ((m === "FILE_KOSONG" || m === "FILE_RUSAK") ? pesanFile(err, file) : m));
         }
     }
 
@@ -541,12 +585,14 @@
             return;
         }
 
-        let newData = { nama: nama, hp: hp, nik: nik, tgl: tgl, jk: jk, status: "BELUM" };
+        let tempat = document.getElementById("mTempat").value.trim();
+        let newData = { nama: nama, hp: hp, tempat: tempat, nik: nik, tgl: tgl, jk: jk, status: "BELUM" };
         let resNew = await callBackend("tambahPeserta", [K.id, newData]);
         K.rows.push(resNew);
         
         document.getElementById("mNama").value = "";
         document.getElementById("mHp").value = "";
+        document.getElementById("mTempat").value = "";
         document.getElementById("mNik").value = "";
         renderDetailKegiatan();
         alert(`${nama} berhasil ditambahkan sebagai No ${resNew.no}.`);
@@ -894,6 +940,7 @@
         document.getElementById("editNama").value = p.nama || "";
         document.getElementById("editNik").value = p.nik || "";
         document.getElementById("editHp").value = p.hp || "";
+        document.getElementById("editTempat").value = p.tempat || "";
         document.getElementById("editTgl").value = p.tgl || "";
         hitungUsiaEdit();
         document.getElementById("editStatus").value = p.hadir ? "HADIR" : "BELUM";
@@ -972,7 +1019,7 @@
             tgl: document.getElementById("editTgl").value,
             nik: document.getElementById("editNik").value.replace(/\D/g, ""),
             hp: document.getElementById("editHp").value.trim(), jenis: p.jenis, urut: p.urut, bagian: p.bagian,
-            jabatan: p.jabatan, tempat: p.tempat,
+            jabatan: p.jabatan, tempat: document.getElementById("editTempat").value.trim(),
             haid: haid, status: status
         };
         let res = await callBackend("simpanPeserta", [K.id, Number(p.no), d]);
