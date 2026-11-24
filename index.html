@@ -391,13 +391,14 @@
     // Membaca file Excel dari input. Kalau hasilnya kosong (sering terjadi di HP saat file
     // baru dipilih dari WhatsApp/Drive), file dibaca ulang otomatis oleh previewExcel.
     // Membaca isi file dengan 3 cara bergantian (file dari WA sering kosong di cara pertama)
-    async function bacaIsiFile(file) {
+    async function bacaIsiFile(file, diag) {
+        const nama = ["A", "B", "C"];
         const cara = [
-            () => file.arrayBuffer ? file.arrayBuffer() : Promise.reject(new Error("x")),
+            () => file.arrayBuffer ? file.arrayBuffer() : Promise.reject(new Error("tidak ada")),
             () => new Promise((ok, gagal) => {
                 let r = new FileReader();
                 r.onload = e => ok(e.target.result);
-                r.onerror = () => gagal(new Error("x"));
+                r.onerror = () => gagal(r.error || new Error("gagal"));
                 r.readAsArrayBuffer(file);
             }),
             async () => {
@@ -405,14 +406,19 @@
                 try { return await (await fetch(u)).arrayBuffer(); } finally { URL.revokeObjectURL(u); }
             }
         ];
-        let terbaik = null;
+        let terbaik = null, i = -1;
         for (const c of cara) {
+            i++;
             try {
                 let buf = await c();
-                if (!buf || !buf.byteLength) continue;
-                if (!file.size || buf.byteLength === file.size) return buf; // utuh
-                if (!terbaik || buf.byteLength > terbaik.byteLength) terbaik = buf;
-            } catch (e) { /* coba cara berikutnya */ }
+                let n = buf ? buf.byteLength : 0;
+                if (diag) diag.push(`${nama[i]}:${n}B`);
+                if (!n) continue;
+                if (!file.size || n === file.size) return buf; // utuh
+                if (!terbaik || n > terbaik.byteLength) terbaik = buf;
+            } catch (e) {
+                if (diag) diag.push(`${nama[i]}:ERR ${(e && e.name) || ""}`);
+            }
         }
         return terbaik;
     }
@@ -420,30 +426,60 @@
     function pesanFile(e, file) {
         let m = String((e && e.message) || "");
         let kb = file ? Math.round(file.size / 1024) : 0;
-        if (file && file.size === 0) return "File kosong (0 KB). Kemungkinan file dari WA belum selesai diunduh. Unduh dulu ke memori HP, lalu pilih ulang.";
-        if (m === "FILE_RUSAK") return "File bukan Excel yang valid atau diberi password. Coba buka lalu simpan ulang sebagai .xlsx.";
-        return `Isi file belum terbaca (ukuran file ${kb} KB). Unduh dulu ke memori HP, lalu pilih ulang.`;
+        let r = e && e.rincian ? ` [${e.rincian}]` : "";
+        if (file && file.size === 0) return "File kosong (0 KB), kemungkinan file dari WA belum selesai diunduh.";
+        if (m === "FILE_RUSAK") return "File bukan Excel yang valid atau diberi password." + r;
+        return `Isi file belum terbaca (ukuran file ${kb} KB).` + r;
+    }
+
+    // Memperbaiki sheet yang rentang selnya (!ref) hilang atau salah, supaya baris tidak terbaca kosong
+    function perbaikiRef(ws) {
+        let r = null;
+        Object.keys(ws).forEach(k => {
+            if (k[0] === "!") return;
+            let c = XLSX.utils.decode_cell(k);
+            if (!r) r = { s: { r: c.r, c: c.c }, e: { r: c.r, c: c.c } };
+            else {
+                if (c.r < r.s.r) r.s.r = c.r; if (c.c < r.s.c) r.s.c = c.c;
+                if (c.r > r.e.r) r.e.r = c.r; if (c.c > r.e.c) r.e.c = c.c;
+            }
+        });
+        if (r) ws["!ref"] = XLSX.utils.encode_range(r);
     }
 
     async function bacaFileExcel(file) {
         let skipRegex = /^(PENDAFTARAN|HADIR|TIDAK HADIR|MCU KLINIK JEPARA|DATA MENTAH|MAILINGS)$/i;
-        let buf = await bacaIsiFile(file);
-        if (!buf) throw new Error("FILE_KOSONG");
+        let diag = [];
+        let buf = await bacaIsiFile(file, diag);
+        if (!buf) { let e = new Error("FILE_KOSONG"); e.rincian = diag.join(", "); throw e; }
         let workbook;
         try { workbook = XLSX.read(new Uint8Array(buf), { type: 'array' }); }
-        catch (x) { throw new Error(buf.byteLength === file.size ? "FILE_RUSAK" : "FILE_KOSONG"); }
-        let payloadSheets = [], rawSheets = [], totalBaris = 0;
-        workbook.SheetNames.forEach(sheetName => {
-            if (!skipRegex.test(sheetName)) {
+        catch (x) {
+            let e = new Error(buf.byteLength === file.size ? "FILE_RUSAK" : "FILE_KOSONG");
+            e.rincian = diag.join(", ") + "; " + ((x && x.message) || x);
+            throw e;
+        }
+        const kumpul = pakaiSkip => {
+            let payloadSheets = [], rawSheets = [], totalBaris = 0;
+            workbook.SheetNames.forEach(sheetName => {
+                if (pakaiSkip && skipRegex.test(sheetName)) return;
                 let ws = workbook.Sheets[sheetName];
+                perbaikiRef(ws);
                 let rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
                 totalBaris += rows.length;
                 rawSheets.push({ name: sheetName, rows: rows });
                 payloadSheets.push({ name: sheetName, rows: rows.map(r => r.slice(0, 40)) });
-            }
-        });
-        if (totalBaris === 0) throw new Error("FILE_KOSONG");
-        return { payloadSheets, rawSheets };
+            });
+            return { payloadSheets, rawSheets, totalBaris };
+        };
+        let hasil = kumpul(true);
+        if (hasil.totalBaris === 0) hasil = kumpul(false); // semua sheet bernama "dilewati" -> pakai semuanya
+        if (hasil.totalBaris === 0) {
+            let e = new Error("FILE_KOSONG");
+            e.rincian = diag.join(", ") + "; sheet: " + workbook.SheetNames.join(" | ");
+            throw e;
+        }
+        return { payloadSheets: hasil.payloadSheets, rawSheets: hasil.rawSheets };
     }
 
     function bolehUlang(msg) {
@@ -480,7 +516,14 @@
             }
         }
         st.style.color = "var(--red, #ff6b6b)";
-        st.textContent = "❌ " + pesanFile(lastErr, f);
+        st.textContent = "❌ " + pesanFile(lastErr, f) + " ";
+        let bt = document.createElement("button");
+        bt.textContent = "📂 Pilih ulang file";
+        bt.className = "secondary";
+        bt.style.cssText = "width:auto; padding:6px 12px; margin:6px 0 0 0;";
+        bt.onclick = () => { input.value = ""; input.click(); };
+        st.appendChild(document.createElement("br"));
+        st.appendChild(bt);
     }
 
     async function previewExcel() {
