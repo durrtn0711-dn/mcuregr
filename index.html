@@ -102,6 +102,8 @@
         <input type="text" id="editNama">
         <label>NIK</label>
         <input type="text" id="editNik" inputmode="numeric">
+        <label>No HP</label>
+        <input type="tel" id="editHp">
         <label>Tanggal Lahir</label>
         <input type="date" id="editTgl" onchange="hitungUsiaEdit()">
         <label>Usia (otomatis dari tanggal lahir)</label>
@@ -156,8 +158,10 @@
             <label>Tanggal</label>
             <input type="date" id="inputTgl">
             <label>Upload File Mentah Excel (.xlsx)</label>
-            <input type="file" id="inputExcel" accept=".xlsx, .xls">
-            <button onclick="previewExcel()">Periksa File Excel (Kilat)</button>
+            <input type="file" id="inputExcel" accept=".xlsx, .xls" onchange="siapkanFile()">
+            <div id="fileStatus" style="font-size:0.8rem; margin:4px 0 8px 0;"></div>
+            <button onclick="previewExcel()">Periksa File Excel</button>
+            <button class="secondary" onclick="mulaiManual()" style="margin-top:8px;">✍️ Mulai Tanpa File (Input Manual)</button>
         </div>
 
         <!-- PREVIEW & KONFIRMASI DUPLIKAT -->
@@ -215,10 +219,10 @@
                 <div style="margin-top:10px;">
                     <label>Nama Lengkap</label>
                     <input type="text" id="mNama" placeholder="Nama peserta...">
-                    <label>No RM</label>
-                    <input type="text" id="mRm" placeholder="Nomor RM...">
                     <label>NIK (16 Digit)</label>
                     <input type="text" id="mNik" placeholder="Nomor KTP/NIK...">
+                    <label>No HP</label>
+                    <input type="tel" id="mHp" placeholder="Nomor HP...">
                     <label>Tanggal Lahir</label>
                     <input type="date" id="mTgl">
                     <label>Jenis Kelamin</label>
@@ -407,7 +411,32 @@
     }
 
     function bolehUlang(msg) {
-        return /FILE_KOSONG|Judul kolom|fetch|network|Load failed|JSON|Unexpected|timeout/i.test(msg || "");
+        return /FILE_KOSONG|fetch|network|Load failed|JSON|Unexpected|timeout/i.test(msg || "");
+    }
+
+    function kunciFile(f) { return f.name + "|" + f.size + "|" + f.lastModified; }
+
+    // Isi file dibaca & diurai SEGERA setelah dipilih, supaya tidak gagal karena file
+    // sudah "hilang" dari browser saat tombol Periksa ditekan.
+    async function siapkanFile() {
+        let st = document.getElementById("fileStatus");
+        let f = document.getElementById("inputExcel").files[0];
+        appData.fileCache = null;
+        if (!f) { st.textContent = ""; return; }
+        st.style.color = "#aaa"; st.textContent = "⏳ Membaca file...";
+        let key = kunciFile(f);
+        for (let t = 0; t < 3; t++) {
+            try {
+                if (t > 0) await new Promise(r => setTimeout(r, 800));
+                let data = await bacaFileExcel(f);
+                appData.fileCache = { key: key, data: data };
+                let n = data.payloadSheets.reduce((m, x) => m + x.rows.length, 0);
+                st.style.color = "var(--green)"; st.textContent = `✅ File siap dibaca (${n} baris)`;
+                return;
+            } catch (e) { /* coba lagi */ }
+        }
+        st.style.color = "var(--red, #ff6b6b)";
+        st.textContent = "❌ File tidak terbaca. Pilih ulang file-nya.";
     }
 
     async function previewExcel() {
@@ -419,18 +448,21 @@
             return;
         }
 
-        showLoading(true, "Membaca file Excel secepat kilat...");
+        showLoading(true, "Membaca file Excel...");
         let file = fileInput.files[0];
         try {
-            // Coba sampai 3 kali (file dibaca ulang tiap percobaan), jadi tidak perlu upload ulang manual
-            let res = null, data = null, lastErr = null;
+            let data = (appData.fileCache && appData.fileCache.key === kunciFile(file)) ? appData.fileCache.data : null;
+            let res = null, lastErr = null;
             for (let t = 0; t < 3; t++) {
                 try {
                     if (t > 0) {
-                        showLoading(true, `Mencoba membaca ulang (${t}/2)...`);
+                        showLoading(true, `Mencoba lagi (${t}/2)...`);
                         await new Promise(r => setTimeout(r, 1200));
                     }
-                    data = await bacaFileExcel(file);
+                    if (!data) {
+                        data = await bacaFileExcel(file);
+                        appData.fileCache = { key: kunciFile(file), data: data };
+                    }
                     res = await callBackend("previewUpload", [pt, tgl, data.payloadSheets], true);
                     break;
                 } catch (e) {
@@ -441,27 +473,39 @@
             if (!res) throw lastErr || new Error("Gagal membaca file.");
             appData.tempUploadPayload = { kode: pt, tgl: tgl, payload: data.payloadSheets, raw: data.rawSheets };
 
-                document.getElementById("previewInfo").innerHTML = `<b>Total Ditemukan: ${res.total} Peserta</b> | Baru: ${res.baru}, Dilewati: ${res.lewat}`;
-                
-                let conflictBox = document.getElementById("conflictContainer");
-                let conflictList = document.getElementById("conflictList");
-                conflictList.innerHTML = "";
+            document.getElementById("previewInfo").innerHTML = `<b>Total Ditemukan: ${res.total} Peserta</b> | Baru: ${res.baru}, Dilewati: ${res.lewat}` +
+                (res.catatan ? `<div style="color:var(--yellow); margin-top:6px; font-size:0.85rem;">⚠️ ${res.catatan}</div>` : "");
 
-                if (res.cek && res.cek.length > 0) {
-                    conflictBox.classList.remove("hidden");
-                    res.cek.forEach(c => {
-                        conflictList.innerHTML += `• No ${c.no}. <b>${c.nama}</b>: ${c.masalah}<br>`;
-                    });
-                } else {
-                    conflictBox.classList.add("hidden");
-                }
-
-                document.getElementById("previewSection").classList.remove("hidden");
+            let conflictBox = document.getElementById("conflictContainer");
+            let conflictList = document.getElementById("conflictList");
+            conflictList.innerHTML = "";
+            if (res.cek && res.cek.length > 0) {
+                conflictBox.classList.remove("hidden");
+                res.cek.forEach(c => {
+                    conflictList.innerHTML += `• No ${c.no}. <b>${c.nama}</b>: ${c.masalah}<br>`;
+                });
+            } else {
+                conflictBox.classList.add("hidden");
+            }
+            document.getElementById("previewSection").classList.remove("hidden");
         } catch (err) {
             showLoading(false);
             let m = String(err.message || "");
-            alert("Gagal membaca file Excel: " + (m === "FILE_KOSONG" ? "isi file belum terbaca. Coba pilih file lagi." : m));
+            alert("Gagal membaca file Excel: " + (m === "FILE_KOSONG" ? "isi file belum terbaca. Pilih ulang file-nya lalu coba lagi." : m));
         }
+    }
+
+    // Mulai kegiatan tanpa file (misalnya MCU hanya diberi KTP): peserta diinput manual
+    async function mulaiManual() {
+        let pt = document.getElementById("selectPt").value;
+        let tgl = document.getElementById("inputTgl").value;
+        if (!pt || !tgl) { alert("Pilih PT dan Tanggal terlebih dahulu!"); return; }
+        let s = await callBackend("buatKegiatan", [pt, tgl]);
+        appData.activeKegiatan = await callBackend("getKegiatan", [s.keg]);
+        document.getElementById("previewSection").classList.add("hidden");
+        document.getElementById("homeSection").classList.add("hidden");
+        document.getElementById("detailSection").classList.remove("hidden");
+        renderDetailKegiatan();
     }
 
     async function saveUpload() {
@@ -487,25 +531,25 @@
     async function addManualParticipant() {
         let K = appData.activeKegiatan;
         let nama = document.getElementById("mNama").value.trim();
-        let rm = document.getElementById("mRm").value.trim();
+        let hp = document.getElementById("mHp").value.trim();
         let nik = document.getElementById("mNik").value.trim();
         let tgl = document.getElementById("mTgl").value;
         let jk = document.getElementById("mJk").value;
 
-        if (!nama || !rm) {
-            alert("Nama dan No RM wajib diisi!");
+        if (!nama) {
+            alert("Nama wajib diisi!");
             return;
         }
 
-        let newData = { nama: nama, rm: rm, nik: nik, tgl: tgl, jk: jk, status: "BELUM" };
+        let newData = { nama: nama, hp: hp, nik: nik, tgl: tgl, jk: jk, status: "BELUM" };
         let resNew = await callBackend("tambahPeserta", [K.id, newData]);
         K.rows.push(resNew);
         
         document.getElementById("mNama").value = "";
-        document.getElementById("mRm").value = "";
+        document.getElementById("mHp").value = "";
         document.getElementById("mNik").value = "";
         renderDetailKegiatan();
-        alert(`${nama} berhasil ditambahkan!`);
+        alert(`${nama} berhasil ditambahkan sebagai No ${resNew.no}.`);
     }
 
     function renderDetailKegiatan() {
@@ -849,6 +893,7 @@
         document.getElementById("editNoInfo").textContent = `(No. ${p.no})`;
         document.getElementById("editNama").value = p.nama || "";
         document.getElementById("editNik").value = p.nik || "";
+        document.getElementById("editHp").value = p.hp || "";
         document.getElementById("editTgl").value = p.tgl || "";
         hitungUsiaEdit();
         document.getElementById("editStatus").value = p.hadir ? "HADIR" : "BELUM";
@@ -926,7 +971,7 @@
             jk: (p.jk === "L" || p.jk === "P") ? p.jk : "",
             tgl: document.getElementById("editTgl").value,
             nik: document.getElementById("editNik").value.replace(/\D/g, ""),
-            hp: p.hp, jenis: p.jenis, urut: p.urut, bagian: p.bagian,
+            hp: document.getElementById("editHp").value.trim(), jenis: p.jenis, urut: p.urut, bagian: p.bagian,
             jabatan: p.jabatan, tempat: p.tempat,
             haid: haid, status: status
         };
