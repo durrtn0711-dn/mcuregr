@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCU Registrasi Klinik</title>
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    <meta name="theme-color" content="#121212">
     <style>
         :root {
             --bg-color: #121212;
@@ -136,6 +140,9 @@
 </div>
 
 <div class="container">
+    <div id="mcuInstallPanel" class="card hidden">
+        <button id="mcuInstallButton" type="button" style="margin:0; background:var(--blue); color:#fff;">&#128242; Instal Aplikasi MCU</button>
+    </div>
     <!-- HALAMAN LOGIN -->
     <div id="loginSection" class="card">
         <h3>🏥 MCU Registrasi <small style="font-weight:normal;color:#888;">v4</small></h3>
@@ -1119,6 +1126,31 @@
         await callBackend("resetSemua");
         handleLogin(true);
     }
+</script>
+<script>
+(function () {
+    let installPrompt = null;
+    const panel = document.getElementById('mcuInstallPanel');
+    const button = document.getElementById('mcuInstallButton');
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    window.addEventListener('beforeinstallprompt', function (event) {
+        if (standalone) return;
+        event.preventDefault();
+        installPrompt = event;
+        panel.classList.remove('hidden');
+    });
+    button.addEventListener('click', async function () {
+        if (!installPrompt) return;
+        const prompt = installPrompt;
+        installPrompt = null;
+        panel.classList.add('hidden');
+        try { await prompt.prompt(); } catch (error) { console.warn('MCU install prompt:', error); }
+    });
+    window.addEventListener('appinstalled', function () {
+        installPrompt = null;
+        panel.classList.add('hidden');
+    });
+})();
 </script>
 </body>
 </html>
